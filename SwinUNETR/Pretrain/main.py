@@ -17,17 +17,41 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.optim as optim
-from losses.loss import Loss
-from models.ssl_head import SSLHead
+from net.research_contributions.SwinUNETR.Pretrain.losses.loss import Loss
+from net.research_contributions.SwinUNETR.Pretrain.models.ssl_head import SSLHead
 from optimizers.lr_scheduler import WarmupCosineSchedule
 from torch.cuda.amp import GradScaler, autocast
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
-from utils.data_utils import get_loader
-from utils.ops import aug_rand, rot_rand
+from net.research_contributions.SwinUNETR.Pretrain.utils.data_utils import get_loader
+from net.research_contributions.SwinUNETR.Pretrain.utils.ops import aug_rand, rot_rand
+from models import setup_model
+from utils import config
+from data import setup_pretraining_data_SwinUNETR
+
+import torch
+import torch.nn.functional as F
+
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import init_process_group, destroy_process_group
+import os
 
 
-def main():
+def ddp_setup(rank: int, world_size: int):
+    """
+    Args:
+        rank: Unique identifier of each process
+       world_size: Total number of processes
+    """
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+    torch.cuda.set_device(rank)
+    init_process_group(backend="nccl", rank=rank, world_size=world_size)
+
+
+def main(rank: int = 0, world_size: int = 1):
     def save_ckp(state, checkpoint_dir):
         torch.save(state, checkpoint_dir)
 
@@ -151,11 +175,14 @@ def main():
         return np.mean(loss_val), np.mean(loss_val_recon), img_list
 
     parser = argparse.ArgumentParser(description="PyTorch Training")
-    parser.add_argument("--logdir", default="test", type=str, help="directory to save the tensorboard logs")
-    parser.add_argument("--epochs", default=100, type=int, help="number of training epochs")
-    parser.add_argument("--num_steps", default=100000, type=int, help="number of training iterations")
-    parser.add_argument("--eval_num", default=100, type=int, help="evaluation frequency")
-    parser.add_argument("--warmup_steps", default=500, type=int, help="warmup steps")
+    parser.add_argument(
+        "--logdir", default="swinunetr_MedNeXt_M", type=str, help="directory to save the tensorboard logs"
+    )
+    # 实际上这个 epochs 根本没有起作用，一直是 global_step 在控制
+    parser.add_argument("--epochs", default=3, type=int, help="number of training epochs")
+    parser.add_argument("--num_steps", default=1200 * 50, type=int, help="number of training iterations")
+    parser.add_argument("--eval_num", default=2400, type=int, help="evaluation frequency")
+    parser.add_argument("--warmup_steps", default=25, type=int, help="warmup steps")
     parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
     parser.add_argument("--feature_size", default=48, type=int, help="embedding size")
     parser.add_argument("--dropout_path_rate", default=0.0, type=float, help="drop path rate")
@@ -165,15 +192,15 @@ def main():
     parser.add_argument("--a_max", default=1000, type=float, help="a_max in ScaleIntensityRanged")
     parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
     parser.add_argument("--b_max", default=1.0, type=float, help="b_max in ScaleIntensityRanged")
-    parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
-    parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
-    parser.add_argument("--space_z", default=2.0, type=float, help="spacing in z direction")
+    parser.add_argument("--space_x", default=1, type=float, help="spacing in x direction")
+    parser.add_argument("--space_y", default=1, type=float, help="spacing in y direction")
+    parser.add_argument("--space_z", default=1, type=float, help="spacing in z direction")
     parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
     parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
     parser.add_argument("--roi_z", default=96, type=int, help="roi size in z direction")
-    parser.add_argument("--batch_size", default=2, type=int, help="number of batch size")
+    parser.add_argument("--batch_size", default=1, type=int, help="number of batch size")
     parser.add_argument("--sw_batch_size", default=2, type=int, help="number of sliding window batch size")
-    parser.add_argument("--lr", default=4e-4, type=float, help="learning rate")
+    parser.add_argument("--lr", default=1e-3, type=float, help="learning rate")
     parser.add_argument("--decay", default=0.1, type=float, help="decay rate")
     parser.add_argument("--momentum", default=0.9, type=float, help="momentum")
     parser.add_argument("--lrdecay", action="store_true", help="enable learning rate decay")
@@ -184,32 +211,35 @@ def main():
     parser.add_argument("--resume", default=None, type=str, help="resume training")
     parser.add_argument("--local_rank", type=int, default=0, help="local rank")
     parser.add_argument("--grad_clip", action="store_true", help="gradient clip")
-    parser.add_argument("--noamp", action="store_true", help="do NOT use amp for training")
+    parser.add_argument("--noamp", default=1, help="do NOT use amp for training")
     parser.add_argument("--dist-url", default="env://", help="url used to set up distributed training")
     parser.add_argument("--smartcache_dataset", action="store_true", help="use monai smartcache Dataset")
     parser.add_argument("--cache_dataset", action="store_true", help="use monai cache Dataset")
+    parser.add_argument("--num_workers", default=4, help="number of workers in dataloader")
 
     args = parser.parse_args()
-    logdir = "./runs/" + args.logdir
+    logdir = os.path.join(config.tensorboard_dir, args.logdir)
     args.amp = not args.noamp
     torch.backends.cudnn.benchmark = True
     torch.autograd.set_detect_anomaly(True)
     args.distributed = False
     if "WORLD_SIZE" in os.environ:
         args.distributed = int(os.environ["WORLD_SIZE"]) > 1
+        ddp_setup(rank, world_size)
+        args.local_rank = rank
     args.device = "cuda:0"
     args.world_size = 1
     args.rank = 0
-
+    # 额外添加
     if args.distributed:
         args.device = "cuda:%d" % args.local_rank
-        torch.cuda.set_device(args.local_rank)
-        torch.distributed.init_process_group(backend="nccl", init_method=args.dist_url)
+        # torch.cuda.set_device(args.local_rank)
+        # torch.distributed.init_process_group(backend="nccl", init_method=args.dist_url)
         args.world_size = torch.distributed.get_world_size()
         args.rank = torch.distributed.get_rank()
         print(
             "Training in distributed mode with multiple processes, 1 GPU per process. Process %d, total %d."
-            % (args.rank, args.world_size)
+            % (args.local_rank, args.world_size)
         )
     else:
         print("Training with a single process on 1 GPUs.")
@@ -221,7 +251,8 @@ def main():
     else:
         writer = None
 
-    model = SSLHead(args)
+    # model = SSLHead(args)
+    model = SSLHead(backbone=setup_model(), args=args, dim=512)
     model.cuda()
 
     if args.opt == "adam":
@@ -256,6 +287,7 @@ def main():
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = DistributedDataParallel(model, device_ids=[args.local_rank])
     train_loader, test_loader = get_loader(args)
+    # train_loader, test_loader = setup_pretraining_data_SwinUNETR(args)
 
     global_step = 0
     best_val = 1e8
@@ -263,6 +295,7 @@ def main():
         scaler = GradScaler()
     else:
         scaler = None
+
     while global_step < args.num_steps:
         global_step, loss, best_val = train(args, global_step, train_loader, best_val, scaler)
     checkpoint = {"epoch": args.epochs, "state_dict": model.state_dict(), "optimizer": optimizer.state_dict()}
@@ -277,4 +310,8 @@ def main():
 
 
 if __name__ == "__main__":
+    # 开启多GPU的设置
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+    # world_size = torch.cuda.device_count()
+    # mp.spawn(main, args=(world_size,), nprocs=world_size)
     main()
