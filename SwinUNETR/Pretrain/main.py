@@ -314,4 +314,5 @@ if __name__ == "__main__":
     # os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
     # world_size = torch.cuda.device_count()
     # mp.spawn(main, args=(world_size,), nprocs=world_size)
+    # 如果不大修的话，感觉开启不了多GPU
     main()
