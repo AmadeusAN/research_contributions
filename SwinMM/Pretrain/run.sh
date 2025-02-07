@@ -1,4 +1,4 @@
-python -m torch.distributed.launch --nproc_per_node=8 --master_port=11223 main.py \
+python -m torch.distributed.launch --nproc_per_node=4 --master_port=11223 main.py \
     --batch_size=2 \
     --num_steps=30000 \
     --lrdecay \

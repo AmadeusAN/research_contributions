@@ -19,14 +19,14 @@ import torch
 import torch.distributed as dist
 import torch.optim as optim
 from losses.loss import Loss, MutualLoss
-from models.ssl_head import SSLHead
+from SwinMM_models.ssl_head import SSLHead
 from optimizers.lr_scheduler import WarmupCosineSchedule
 from torch.cuda.amp import GradScaler, autocast
 from torch.nn.parallel import DistributedDataParallel
-from utils import view_ops, view_transforms
-from utils.data_utils import get_loader
-from utils.dataset_in_memory import hijack_bagua_serialization
-from utils.ops import mask_rand_patch
+from SwinMM_utils import view_ops, view_transforms
+from SwinMM_utils.data_utils import get_loader
+from SwinMM_utils.dataset_in_memory import hijack_bagua_serialization
+from SwinMM_utils.ops import mask_rand_patch
 
 # torch
 torch.multiprocessing.set_sharing_strategy("file_system")

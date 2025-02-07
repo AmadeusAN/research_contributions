@@ -4,7 +4,7 @@ from typing import Tuple
 
 import numpy as np
 import torch
-from utils import view_transforms
+from .view_transforms import rotation_transforms
 
 
 def rot_rand(xs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -13,6 +13,6 @@ def rot_rand(xs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     x_rot = torch.zeros(img_n, dtype=torch.int64, device=xs.device)
     for i in range(img_n):
         orientation = np.random.randint(0, 4)
-        x_aug[i] = view_transforms.rotation_transforms[orientation](xs[i].unsqueeze(0))
+        x_aug[i] = rotation_transforms[orientation](xs[i].unsqueeze(0))
         x_rot[i] = orientation
     return x_aug, x_rot

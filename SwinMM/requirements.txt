@@ -1,6 +1,6 @@
 apex==0.9.10dev
 batchgenerators==0.25
-caffe2==0.8.1
+caffe2
 colorama==0.4.6
 Flask==2.3.2
 gevent==23.9.0
