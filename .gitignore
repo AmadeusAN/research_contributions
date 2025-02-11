@@ -133,3 +133,8 @@ tests/testing_data/*Hippocampus*
 
 # Temporary workspace
 tmp_*_dir/
+
+# model weights saver
+events*
+*.pt
+*.pth
