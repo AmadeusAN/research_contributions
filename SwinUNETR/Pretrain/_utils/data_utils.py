@@ -30,6 +30,7 @@ from data import setup_data, setup_pretraining_data_SwinUNETR
 from pathlib import Path
 import json
 from sklearn.model_selection import train_test_split
+from itertools import chain
 
 
 def get_loader(args):
@@ -72,35 +73,34 @@ def get_loader(args):
     # datalist = new_datalist1 + datalist2 + datalist3 + datalist4 + datalist5
     # val_files = vallist1 + vallist2 + vallist3 + vallist4 + vallist5
 
-    base_dir = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset"
-    manifest1 = f"{base_dir}/abdomenct1k/manifest.json"
-    manifest2 = f"{base_dir}/LITS/media/nas/01_Datasets/CT/LITS/manifest.json"
-    manifest3 = f"{base_dir}/RAOS/RAOS-Real/CancerImages(Set1)/manifest.json"
-    manifest4 = f"{base_dir}/MM-WHS/MM-WHS 2017 Dataset/manifest.json"
-    # manifest5 = f"{base_dir}/MSD/manifest.json"
-    manifest6 = f"{base_dir}/LUNA16/manifest.json"
+    manifest1 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/RAOS/RAOS-Real/CancerImages(Set1)/dataset.json"
+    manifest2 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/LITS/media/nas/01_Datasets/CT/LITS/dataset.json"
+    manifest3 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/abdomenct1k/dataset.json"
 
-    manifest_list = [manifest1, manifest2, manifest3, manifest4, manifest6]
+    manifest_list = [
+        load_decathlon_datalist(manifest, False, "training") for manifest in [manifest1, manifest2, manifest3]
+    ]
+    train_list = list(chain.from_iterable(manifest_list))
+    train_list, val_list = train_test_split(train_list, test_size=0.2, random_state=42)
     datalist = []
     val_files = []
-    for manifest in manifest_list:
-        with Path(manifest).open("r") as f:
-            json_f = json.load(f)
-        json_training = json_f["training"]
-        # 检验一下图像是否是单通道
-        test_image = json_training[0]
-        test_image = LoadImaged(keys=["image"])(test_image)["image"]
-        if len(test_image.shape) != 3:
-            raise ValueError("The image is not single channel")
+    for json_training in train_list:
+        # # 检验一下图像是否是单通道
+        # test_image = json_training
+        # test_image = LoadImaged(keys=["image"])(test_image)["image"]
+        # if len(json_training.shape) != 3:
+        #     raise ValueError("The image is not single channel")
 
-        json_val = json_f.get("validation", None)
-        if json_val is None and json_f.get("testing", None) is None:
-            # 该数据集仅包含训练数据集，因此需要切分
-            josn_training, json_val = train_test_split(json_training, test_size=0.2, random_state=42)
-        else:
-            json_val = json_f["testing"]
-        datalist += [{"image": item["image"]} for item in json_training]
-        val_files += [{"image": item["image"]} for item in json_val]
+        # json_val = json_f.get("validation", None)
+        # if json_val is None and json_f.get("testing", None) is None:
+        #     # 该数据集仅包含训练数据集，因此需要切分
+        #     json_training, json_val = train_test_split(json_training, test_size=0.2, random_state=42)
+        # else:
+        #     json_val = json_f["testing"]
+        datalist += [{"image": json_training["image"]}]
+
+    for json_val in val_list:
+        val_files += [{"image": json_val["image"]}]
 
     # datalist, val_files = setup_pretraining_data_SwinUNETR(args)
     print("Dataset all training: number of data: {}".format(len(datalist)))
@@ -178,3 +178,8 @@ def get_loader(args):
     )
 
     return train_loader, val_loader
+
+
+if __name__ == "__main__":
+    train_loader, val_loader = get_loader()
+    pass

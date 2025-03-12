@@ -164,7 +164,10 @@ def main():
 
     parser = argparse.ArgumentParser(description="PyTorch Training")
     parser.add_argument(
-        "--logdir", default="pretrain_swinunetr_SwinUNETR", type=str, help="directory to save the tensorboard logs"
+        "--logdir",
+        default="./pretrain/pretrain_swinunetr_SwinUNETR",
+        type=str,
+        help="directory to save the tensorboard logs",
     )
     # 实际上这个 epochs 根本没有起作用，一直是 global_step 在控制
     parser.add_argument("--epochs", default=3, type=int, help="number of training epochs")
@@ -183,12 +186,12 @@ def main():
     parser.add_argument("--space_x", default=config.resample_spacing[0], type=float, help="spacing in x direction")
     parser.add_argument("--space_y", default=config.resample_spacing[1], type=float, help="spacing in y direction")
     parser.add_argument("--space_z", default=config.resample_spacing[2], type=float, help="spacing in z direction")
-    parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
-    parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
-    parser.add_argument("--roi_z", default=96, type=int, help="roi size in z direction")
-    parser.add_argument("--batch_size", default=1, type=int, help="number of batch size")
-    parser.add_argument("--sw_batch_size", default=1, type=int, help="number of sliding window batch size")
-    parser.add_argument("--lr", default=1e-3, type=float, help="learning rate")
+    parser.add_argument("--roi_x", default=config.patch_shape[0], type=int, help="roi size in x direction")
+    parser.add_argument("--roi_y", default=config.patch_shape[1], type=int, help="roi size in y direction")
+    parser.add_argument("--roi_z", default=config.patch_shape[2], type=int, help="roi size in z direction")
+    parser.add_argument("--batch_size", default=2, type=int, help="number of batch size")
+    parser.add_argument("--sw_batch_size", default=2, type=int, help="number of sliding window batch size")
+    parser.add_argument("--lr", default=1e-4, type=float, help="learning rate")
     parser.add_argument("--decay", default=0.1, type=float, help="decay rate")
     parser.add_argument("--momentum", default=0.9, type=float, help="momentum")
     parser.add_argument("--lrdecay", action="store_true", help="enable learning rate decay")
@@ -206,7 +209,7 @@ def main():
     parser.add_argument("--num_workers", default=4, help="number of workers in dataloader")
 
     args = parser.parse_args()
-    logdir = "./runs/" + args.logdir
+    logdir = os.path.join(config.tensorboard_dir, args.logdir)
     args.amp = not args.noamp
     torch.backends.cudnn.benchmark = True
     torch.autograd.set_detect_anomaly(True)
