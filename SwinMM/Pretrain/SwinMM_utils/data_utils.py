@@ -10,7 +10,8 @@
 # limitations under the License.
 
 import timm.data
-from SwinMM_utils import dataset_in_memory
+
+# from SwinMM_utils import dataset_in_memory
 
 from monai.data import DataLoader, Dataset, DistributedSampler, load_decathlon_datalist
 from monai.data.utils import list_data_collate
@@ -27,6 +28,7 @@ from monai.transforms import (
 
 from pathlib import Path
 import json
+from itertools import chain
 
 
 def get_loader(args):
@@ -125,22 +127,34 @@ def get_loader(args):
     #     datalist_i = load_decathlon_datalist(json_path, False, "training", base_dir=base_dir)
     #     datalist.extend([{"image": item["image"]} for item in datalist_i])
 
-    base_dir = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset"
-    manifest1 = f"{base_dir}/abdomenct1k/manifest.json"
-    manifest2 = f"{base_dir}/LITS/media/nas/01_Datasets/CT/LITS/manifest.json"
-    manifest3 = f"{base_dir}/RAOS/RAOS-Real/CancerImages(Set1)/manifest.json"
-    manifest4 = f"{base_dir}/MM-WHS/MM-WHS 2017 Dataset/manifest.json"
-    manifest5 = f"{base_dir}/MSD/manifest.json"
-    manifest6 = f"{base_dir}/LUNA16/manifest.json"
+    # base_dir = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset"
+    # manifest1 = f"{base_dir}/abdomenct1k/manifest.json"
+    # manifest2 = f"{base_dir}/LITS/media/nas/01_Datasets/CT/LITS/manifest.json"
+    # manifest3 = f"{base_dir}/RAOS/RAOS-Real/CancerImages(Set1)/manifest.json"
+    # manifest4 = f"{base_dir}/MM-WHS/MM-WHS 2017 Dataset/manifest.json"
+    # manifest5 = f"{base_dir}/MSD/manifest.json"
+    # manifest6 = f"{base_dir}/LUNA16/manifest.json"
 
-    manifest_list = [manifest1, manifest2, manifest3, manifest4, manifest5, manifest6]
-    datalist = []
-    for manifest in manifest_list:
-        with Path(manifest).open("r") as f:
-            json_f = json.load(f)
-        json_f = json_f["training"]
-        datalist += [{"image": item["image"]} for item in json_f]
-    print("Dataset all training: number of data: {}".format(len(datalist)))
+    # manifest_list = [manifest1, manifest2, manifest3, manifest4, manifest5, manifest6]
+    # datalist = []
+    # for manifest in manifest_list:
+    #     with Path(manifest).open("r") as f:
+    #         json_f = json.load(f)
+    #     json_f = json_f["training"]
+    #     datalist += [{"image": item["image"]} for item in json_f]
+    # print("Dataset all training: number of data: {}".format(len(datalist)))
+
+    # convert to custom dataset
+    manifest1 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/RAOS/RAOS-Real/CancerImages(Set1)/dataset.json"
+    manifest2 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/LITS/media/nas/01_Datasets/CT/LITS/dataset.json"
+    manifest3 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/abdomenct1k/dataset.json"
+
+    manifest_list = [manifest1, manifest2, manifest3]
+    manifest_list = [
+        load_decathlon_datalist(manifest, False, "training") for manifest in [manifest1, manifest2, manifest3]
+    ]
+    train_list = list(chain.from_iterable(manifest_list))
+    datalist = [{"image": item["image"]} for item in train_list]
 
     train_transforms = Compose(
         [
@@ -162,18 +176,18 @@ def get_loader(args):
         ]
     )
 
-    if args.use_normal_dataset:
-        train_ds = Dataset(data=datalist, transform=train_transforms)
-    else:
-        train_ds = dataset_in_memory.CachedDataset(
-            data=datalist,
-            transform=train_transforms,
-            dataset_name="pretrain_train",
-            hosts=[{"host": "localhost", "port": str(port)} for port in args.redis_ports],
-            cluster_mode=True,
-            capacity_per_node=200 * 1024 * 1024 * 1024,
-            writer_buffer_size=0,  # Disable write buffer
-        )
+    # if args.use_normal_dataset:
+    train_ds = Dataset(data=datalist, transform=train_transforms)
+    # else:
+    #     train_ds = dataset_in_memory.CachedDataset(
+    #         data=datalist,
+    #         transform=train_transforms,
+    #         dataset_name="pretrain_train",
+    #         hosts=[{"host": "localhost", "port": str(port)} for port in args.redis_ports],
+    #         cluster_mode=True,
+    #         capacity_per_node=200 * 1024 * 1024 * 1024,
+    #         writer_buffer_size=0,  # Disable write buffer
+    #     )
 
     if args.distributed:
         train_sampler = DistributedSampler(dataset=train_ds, even_divisible=True, shuffle=True)

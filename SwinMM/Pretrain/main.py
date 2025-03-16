@@ -25,7 +25,8 @@ from torch.cuda.amp import GradScaler, autocast
 from torch.nn.parallel import DistributedDataParallel
 from SwinMM_utils import view_ops, view_transforms
 from SwinMM_utils.data_utils import get_loader
-from SwinMM_utils.dataset_in_memory import hijack_bagua_serialization
+
+# from SwinMM_utils.dataset_in_memory import hijack_bagua_serialization
 from SwinMM_utils.ops import mask_rand_patch
 
 # torch
@@ -167,7 +168,7 @@ def main():
     parser.add_argument("--eval_num", default=100, type=int, help="evaluation frequency")
     parser.add_argument("--warmup_steps", default=500, type=int, help="warmup steps")
     parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
-    parser.add_argument("--feature_size", default=48, type=int, help="embedding size")
+    parser.add_argument("--feature_size", default=36, type=int, help="embedding size")
     parser.add_argument("--dropout_path_rate", default=0.0, type=float, help="drop path rate")
     parser.add_argument("--use_checkpoint", action="store_true", help="use gradient checkpointing to save memory")
     parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
@@ -182,7 +183,7 @@ def main():
     parser.add_argument("--roi_y", default=64, type=int, help="roi size in y direction")
     parser.add_argument("--roi_z", default=64, type=int, help="roi size in z direction")
     parser.add_argument("--mask_ratio", default=0.5, type=float, help="mask ratio for MAE pretraining")
-    parser.add_argument("--window_size", default=16, type=int, help="window size for MAE pretraining")
+    parser.add_argument("--window_size", default=8, type=int, help="window size for MAE pretraining")
     parser.add_argument("--batch_size", default=1, type=int, help="number of batch size")
     parser.add_argument("--sw_batch_size", default=2, type=int, help="number of sliding window batch size")
     parser.add_argument("--lr", default=4e-4, type=float, help="learning rate")
@@ -200,7 +201,7 @@ def main():
     parser.add_argument("--dist-url", default="env://", help="url used to set up distributed training")
     parser.add_argument("--norm_pix_loss", action="store_true", help="normalize before compute reconstruction loss")
     parser.add_argument("--redis_ports", nargs="+", type=int, help="redis ports")
-    parser.add_argument("--redis_compression", type=str, default="lz4", help="compression method for redis.")
+    parser.add_argument("--redis_compression", type=str, default=None, help="compression method for redis.")
     parser.add_argument("--use_normal_dataset", action="store_true", help="use monai Dataset class")
     parser.add_argument(
         "--nouse_multi_epochs_loader",
@@ -239,8 +240,8 @@ def main():
     assert args.rank >= 0
 
     if args.redis_compression is not None:
-        hijack_bagua_serialization(args.redis_compression)
-
+        # hijack_bagua_serialization(args.redis_compression)
+        print("hijack_bagua_serialization is not implemented")
     if args.rank == 0:
         os.makedirs(logdir, exist_ok=True)
 
