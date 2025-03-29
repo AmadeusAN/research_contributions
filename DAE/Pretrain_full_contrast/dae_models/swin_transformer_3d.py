@@ -3,7 +3,7 @@ import pdb
 from functools import lru_cache, reduce
 from operator import mul
 
-import apex
+# import apex
 import numpy as np
 import torch
 import torch.nn as nn

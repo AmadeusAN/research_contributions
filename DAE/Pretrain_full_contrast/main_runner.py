@@ -10,15 +10,23 @@ import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.nn.functional as F
 import torchvision
-from data import build_loader
+from dae_data import build_loader
 from logger import create_logger
 from lr_scheduler import build_scheduler
 
 # from config import get_config
-from models import build_model
+from dae_models import build_model
 from optimizer import build_optimizer
 from timm.utils import AverageMeter
-from utils import TensorboardLogger, auto_resume_helper, get_grad_norm, load_checkpoint, reduce_tensor, save_checkpoint
+from dae_utils import (
+    TensorboardLogger,
+    auto_resume_helper,
+    get_grad_norm,
+    load_checkpoint,
+    reduce_tensor,
+    save_checkpoint,
+)
+from utils import config
 
 try:
     # noinspection PyUnresolvedReferences
@@ -56,7 +64,7 @@ def parse_option():
     parser.add_argument("--decoder", type=str, default="upsample", help="decoder type")
     parser.add_argument("--loss_type", type=str, default="mask_only", help="decoder type")
 
-    parser.add_argument("--amp_opt_level", type=str, default="O1", help="amp opt level")
+    parser.add_argument("--amp_opt_level", type=str, default="O0", help="amp opt level")
     parser.add_argument("--epoch", default=100, type=int, help="number of epochs")
     parser.add_argument("--start_epoch", default=0, type=int, help="number of epochs")
     parser.add_argument("--warmpup_epoch", default=20, type=int, help="warmup epoch")
@@ -109,16 +117,16 @@ def parse_option():
     # parser.add_argument('--tag', help='tag of experiment')
 
     # distributed training
-    parser.add_argument("--local_rank", type=int, required=True, help="local rank for DistributedDataParallel")
-    parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
-    parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
-    parser.add_argument("--roi_z", default=96, type=int, help="roi size in z direction")
+    parser.add_argument("--local_rank", type=int, default=0, help="local rank for DistributedDataParallel")
+    parser.add_argument("--roi_x", default=config.patch_shape[0], type=int, help="roi size in x direction")
+    parser.add_argument("--roi_y", default=config.patch_shape[1], type=int, help="roi size in y direction")
+    parser.add_argument("--roi_z", default=config.patch_shape[2], type=int, help="roi size in z direction")
     parser.add_argument("--dropout_rate", default=0.0, type=float, help="dropout rate")
     parser.add_argument("--dropout_path_rate", default=0.0, type=float, help="drop path rate")
     # parser.add_argument('--in_channels', default=1, type=int, help='number of input channels')
-    parser.add_argument("--out_channels", default=14, type=int, help="number of output channels")
+    parser.add_argument("--out_channels", default=config.num_classes, type=int, help="number of output channels")
     # parser.add_argument('--tag', help='tag of experiment')
-    parser.add_argument("--feature_size", default=48, type=int, help="feature size")
+    parser.add_argument("--feature_size", default=config.vit_embed_dim, type=int, help="feature size")
     parser.add_argument("--use_checkpoint", action="store_true", help="use gradient checkpointing to save memory")
     parser.add_argument("--choice", default="mae", type=str, help="choice")
     parser.add_argument("--inf", default="notsim", type=str, help="choice")
