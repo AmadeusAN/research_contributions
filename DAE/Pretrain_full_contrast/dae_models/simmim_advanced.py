@@ -145,7 +145,7 @@ class SwinTransformerForSimMIM(SwinTransformer3D):
         w = mask.flatten(1).unsqueeze(-1).type_as(mask_tokens)
         x = x * (1.0 - w) + mask_tokens * w
         x = self.pos_drop(x)
-        x = x.view(-1, self.embed_dim, D // self.patch_size[0], H // self.patch_size[1], W // self.patch_size[2])
+        x = x.reshape(-1, self.embed_dim, D // self.patch_size[0], H // self.patch_size[1], W // self.patch_size[2])
 
         for layer in self.layers:
             x = layer[0](x)
@@ -338,7 +338,7 @@ class SimMIM(nn.Module):
             )
             self.pixel_shuffle = PixelShuffle3D(self.encoder_stride)
         elif decoder == "deconv":
-            self.transp_conv1 = nn.ConvTranspose3d(768, 384, 2, stride=2)
+            self.transp_conv1 = nn.ConvTranspose3d(576, 384, 2, stride=2)
             self.transp_conv2 = nn.ConvTranspose3d(384, 192, 2, stride=2)
             self.transp_conv3 = nn.ConvTranspose3d(192, 96, 2, stride=2)
             self.transp_conv4 = nn.ConvTranspose3d(96, 48, 2, stride=2)
@@ -346,7 +346,7 @@ class SimMIM(nn.Module):
             self.conv = nn.Conv3d(1, 1, kernel_size=1, stride=1)
 
         elif decoder == "upsample":
-            self.conv_block1 = UnetResBlock(3, 768, 384, kernel_size=3, stride=1, norm_name="instance")
+            self.conv_block1 = UnetResBlock(3, 576, 384, kernel_size=3, stride=1, norm_name="instance")
             self.conv_block2 = UnetResBlock(3, 384, 192, kernel_size=3, stride=1, norm_name="instance")
             self.conv_block3 = UnetResBlock(3, 192, 96, kernel_size=3, stride=1, norm_name="instance")
             self.conv_block4 = UnetResBlock(3, 96, 48, kernel_size=3, stride=1, norm_name="instance")
@@ -357,7 +357,7 @@ class SimMIM(nn.Module):
             # self.act = nn.Sigmoid()
         elif decoder == "vae":
             self.upsample = nn.Sequential(
-                nn.Conv3d(768, 384, kernel_size=3, stride=1, padding=1),
+                nn.Conv3d(576, 384, kernel_size=3, stride=1, padding=1),
                 nn.InstanceNorm3d(384),
                 nn.LeakyReLU(),
                 nn.Upsample(scale_factor=2, mode="trilinear"),
@@ -382,7 +382,7 @@ class SimMIM(nn.Module):
             )
         elif decoder == "vae2":
             self.upsample = nn.Sequential(
-                nn.Conv3d(768, 384, kernel_size=3, stride=1, padding=1),
+                nn.Conv3d(576, 384, kernel_size=3, stride=1, padding=1),
                 nn.InstanceNorm3d(384),
                 nn.LeakyReLU(),
                 nn.Upsample(scale_factor=2, mode="trilinear"),
@@ -441,7 +441,8 @@ class SimMIM(nn.Module):
             .unsqueeze(1)
             .contiguous()
         )
-        loss_recon = F.l1_loss(x_org, x_rec, reduction="none")
+        # loss_recon = F.l1_loss(x_org, x_rec, reduction="none")
+        loss_recon = F.l1_loss(x_org, x_rec)
         if self.loss == "mask_only":
             loss = (loss_recon * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
         elif self.loss == "all_img":

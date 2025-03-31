@@ -37,6 +37,8 @@ from monai.transforms import (
 
 from itertools import chain
 from sklearn.model_selection import train_test_split
+from utils import config
+from pathlib import Path
 
 
 def datafold_read(datalist, basedir, fold=0, key="training"):
@@ -97,7 +99,9 @@ class Transform:
                     Orientationd(keys=["image"], axcodes="RAS"),
                     ScaleIntensityRanged(keys=["image"], a_min=-1000, a_max=1000, b_min=0.0, b_max=1.0, clip=True),
                     SpatialPadd(keys="image", spatial_size=[96, 96, 96]),
-                    RandSpatialCropd(roi_size=[96, 96, 96], keys=["image"], random_size=False, random_center=True),
+                    RandSpatialCropd(
+                        roi_size=config.patch_shape, keys=["image"], random_size=False, random_center=True
+                    ),
                     ToTensord(keys=["image"]),
                 ]
             )
@@ -110,7 +114,9 @@ class Transform:
                     Orientationd(keys=["image"], axcodes="RAS"),
                     NormalizeIntensityd(keys=["image"], nonzero=True, channel_wise=True),
                     SpatialPadd(keys="image", spatial_size=[96, 96, 96]),
-                    RandSpatialCropd(roi_size=[96, 96, 96], keys=["image"], random_size=False, random_center=True),
+                    RandSpatialCropd(
+                        roi_size=config.patch_shape, keys=["image"], random_size=False, random_center=True
+                    ),
                     ToTensord(keys=["image"]),
                 ]
             )
@@ -123,19 +129,23 @@ class Transform:
                     Orientationd(keys=["image"], axcodes="RAS"),
                     ScaleIntensityRanged(keys=["image"], a_min=-1000, a_max=1000, b_min=0.0, b_max=1.0, clip=True),
                     SpatialPadd(keys="image", spatial_size=[96, 96, 96]),
-                    RandSpatialCropd(roi_size=[96, 96, 96], keys=["image"], random_size=False, random_center=True),
+                    RandSpatialCropd(
+                        roi_size=config.patch_shape, keys=["image"], random_size=False, random_center=True
+                    ),
                     ToTensord(keys=["image"]),
                 ]
             )
             self.transform_mri = Compose(
                 [
                     LoadImaged(keys=["image"]),
-                    AddChanneld(keys=["image"]),
+                    EnsureChannelFirstd(keys=["image"]),
                     # Spacingd(keys=["image"], pixdim=(1, 1, 1), mode=("bilinear")),
                     Orientationd(keys=["image"], axcodes="RAS"),
                     NormalizeIntensityd(keys=["image"], nonzero=True, channel_wise=True),
                     SpatialPadd(keys="image", spatial_size=[96, 96, 96]),
-                    RandSpatialCropd(roi_size=[96, 96, 96], keys=["image"], random_size=False, random_center=True),
+                    RandSpatialCropd(
+                        roi_size=config.patch_shape, keys=["image"], random_size=False, random_center=True
+                    ),
                     ToTensord(keys=["image"]),
                 ]
             )
@@ -342,9 +352,10 @@ def build_loader_simmim(args):
 
     #     print("Dataset all validation: number of data: {}".format(len(val_files)))
 
-    manifest1 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/RAOS/RAOS-Real/CancerImages(Set1)/dataset.json"
-    manifest2 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/LITS/media/nas/01_Datasets/CT/LITS/dataset.json"
-    manifest3 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/abdomenct1k/dataset.json"
+    d = config.project_path
+    manifest1 = Path(d) / "dataset/raw_dataset/RAOS/RAOS-Real/CancerImages(Set1)/dataset.json"
+    manifest2 = Path(d) / "dataset/raw_dataset/LITS/media/nas/01_Datasets/CT/LITS/dataset.json"
+    manifest3 = Path(d) / "dataset/raw_dataset/abdomenct1k/dataset.json"
 
     manifest_list = [manifest1, manifest2, manifest3]
     manifest_list = [
@@ -353,18 +364,48 @@ def build_loader_simmim(args):
     train_list = list(chain.from_iterable(manifest_list))
     datalist, val_files = train_test_split(train_list, test_size=0.2, random_state=42)
 
+    # datalist = datalist[:6]
+    # val_files = val_files[:6]
+
+    for i in range(len(datalist)):
+        tmp = datalist[i]
+        imgname = tmp["image"]
+        if "t1" in imgname:
+            tmp["class"] = "t1"
+        elif "t2" in imgname:
+            tmp["class"] = "t2"
+        elif "t1ce" in imgname:
+            tmp["class"] = "t1ce"
+        elif "flair" in imgname:
+            tmp["class"] = "flair"
+        else:
+            tmp["class"] = "ct"
+    for i in range(len(val_files)):
+        tmp = val_files[i]
+        imgname = tmp["image"]
+        if "t1" in imgname:
+            tmp["class"] = "t1"
+        elif "t2" in imgname:
+            tmp["class"] = "t2"
+        elif "t1ce" in imgname:
+            tmp["class"] = "t1ce"
+        elif "flair" in imgname:
+            tmp["class"] = "flair"
+        else:
+            tmp["class"] = "ct"
+
     transform = Transform(args)
     # dataset_train = CacheDataset(data=datalist, transform=transform, cache_rate=1.0, num_workers=8, cache_num=4759)
     # dataset_val = CacheDataset(data=val_files, transform=transform, cache_rate=1.0, num_workers=8, cache_num=260)
     dataset_train = CacheDataset(data=datalist, transform=transform, cache_rate=1.0, num_workers=8)
     dataset_val = CacheDataset(data=val_files, transform=transform, cache_rate=1.0, num_workers=8)
 
-    sampler_train = DistributedSampler(
-        dataset_train, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=True
-    )
-    sampler_val = DistributedSampler(
-        dataset_val, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=False
-    )
+    # sampler_train = DistributedSampler(
+    #     dataset_train, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=True
+    # )
+    # sampler_val = DistributedSampler(
+    #     dataset_val, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=False
+    # )
 
     # dataloader_train = ThreadDataLoader(dataset_train, num_workers=8, sampler=sampler_train, batch_size=args.batch_size,
     #                                     collate_fn=collate_fn)
@@ -373,15 +414,21 @@ def build_loader_simmim(args):
     dataloader_train = DataLoader(
         dataset_train,
         args.batch_size,
-        sampler=sampler_train,
+        # sampler=sampler_train,
         num_workers=8,
         pin_memory=True,
         drop_last=True,
         collate_fn=collate_fn,
+        shuffle=True,
     )
 
     dataloader_val = DataLoader(
-        dataset_val, 1, sampler=sampler_val, num_workers=8, pin_memory=True, collate_fn=collate_fn
+        dataset_val,
+        1,
+        # sampler=sampler_val,
+        num_workers=8,
+        pin_memory=True,
+        collate_fn=collate_fn,
     )
 
     return dataloader_train, dataloader_val

@@ -5,6 +5,9 @@ This repository contains the code for Disruptive Auto Encoders (DAE), the DAE mo
 
 The below figure provides an overview that the 3D medical image is disrupted with a combination of low-level perturbations - noise and downsampling, followed by tokenization and local masking. These disrupted tokens are then passed through a transformer encoder and convolutional decoder to learn to reconstruct the original image. Our method also includes cross modal contrastive learning to bring in modality-awareness to the pre-training framework. This can act as an effective pre-training strategy to extract meaningful low-level representations for 3D medical image analysis.
 
+>[!important]
+对比损失是在跨模态的实现，如果没有跨模态的数据，则没有对比损失
+
 <img src=figs/dae_overview.png width="400" height="530" align="center">
 
 The reconstruction quality is an indicator that low-level pretraining can provide better representations, we can clearly observe that finer features of the image are neglected during reconstruction when using masking based techniques
@@ -40,7 +43,7 @@ Use --decoder_off tag to switch off decoder during training (not generally used)
 Sample Code:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=8 main_runner.py --batch_size=2 --sw_batch_size=1 --mask_ratio=0.6 --epoch=300 --mask_patch_size=16 --img_size=96 --min_lr=1e-5 --warmpup_epoch=4 --loss_type=all_img --base_lr=1e-4 --warmup_lr=1e-6 --weight_decay=0.05 --cache_dataset --cache_rate=1 --model_type=swin_skip --save_freq=5 --print_freq=1 --log_dir="./logdir/swin_denoise_mm" --output="./output/swin_denoise_mm" --thread_loader --out_channels=1 --choice "denoise" --variance 0.1 --mm_con 0.03 --temperature 0.5 --amp_opt_level="O0"
+python -m torch.distributed.launch --nproc_per_node=2 ./net/research-contributions/DAE/Pretrain_full_contrast/main_runner.py --batch_size=2 --sw_batch_size=1 --mask_ratio=0.6 --epoch=300 --mask_patch_size=16 --img_size=96 --min_lr=1e-5 --warmpup_epoch=4 --loss_type=all_img --base_lr=1e-4 --warmup_lr=1e-6 --weight_decay=0.05 --cache_dataset --cache_rate=1 --model_type=swin_skip --save_freq=5 --print_freq=1 --log_dir="./logdir/swin_denoise_mm" --output="./output/swin_denoise_mm" --thread_loader --out_channels=1 --choice "denoise" --variance 0.1 --mm_con 0.03 --temperature 0.5 --amp_opt_level="O0"
 ```
 
 --variance can be use to change the variance of gaussian noise. Default=0.1
