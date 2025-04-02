@@ -18,8 +18,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
-from mlp_new import MLPBlock as Mlp
-from patchembedding import PatchEmbed
+from .mlp_new import MLPBlock as Mlp
+from .patchembedding import PatchEmbed
 from torch.nn import LayerNorm
 
 from monai.networks.blocks import UnetBasicBlock, UnetOutBlock, UnetrBasicBlock, UnetrUpBlock

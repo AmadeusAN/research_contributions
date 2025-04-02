@@ -21,12 +21,12 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn.parallel
 import torch.utils.data.distributed
-from optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
-from swin_unetr_og import SwinUNETR, SwinUNETR_OG
-from trainer import run_training
+from .optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
+from .swin_unetr_og import SwinUNETR, SwinUNETR_OG
+from .trainer import run_training
 
 # from monai.networks.nets import SwinUNETR
-from _utils.data_utils import get_loader
+from ._utils.data_utils import get_loader
 
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss, DiceLoss
@@ -292,24 +292,9 @@ def main_worker(gpu, args):
     return accuracy
 
 
-def get_model():
-    model = SwinUNETR(
-        img_size=config.patch_shape,
-        in_channels=1,
-        out_channels=config.num_classes,
-        feature_size=config.vit_embed_dim,
-        drop_rate=config.vit_drop_rate,
-        attn_drop_rate=config.vit_attn_drop_rate,
-        use_checkpoint=config.vit_use_checkpoint,
-    )
-
-    pretrained_dir = Path(config.tensorboard_dir) / "pretrain" / "pretrain_dae"
-    pretrained_model_name = "ckpt_best.pth"
-
-    model_dict = torch.load(os.path.join(pretrained_dir, pretrained_model_name))["model"]
-    # print(model_dict.keys())
-    model.load_state_dict(model_dict)
-    print("Use pretrained weights")
+def get_dae_model():
+    args = parser.parse_args()
+    model = main_worker(0, args)
     return model
 
 
