@@ -12,6 +12,7 @@
 import argparse
 import os
 import pdb
+from pathlib import Path
 from functools import partial
 
 import numpy as np
@@ -23,18 +24,9 @@ import torch.utils.data.distributed
 from optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 from swin_unetr_og import SwinUNETR, SwinUNETR_OG
 from trainer import run_training
-from unetr import UNETR as UNETR_tok
-from unetr_agnfuse import UNETR as UNETR_agnfuse
-from unetr_og import UNETR
-from unetr_og_8 import UNETR as UNETR_8
-from unetr_patchmerger import UNETR as UNETR_patch
-from unetr_patchmerger_8 import UNETR as UNETR_patch_8
-from unetr_patchmerger_fuse import UNETR as UNETR_fuse
-from unetr_patchmerger_fuse_8 import UNETR as UNETR_fuse_8
-from unetr_patchmerger_fuse_new import UNETR as UNETR_fuse_new
 
 # from monai.networks.nets import SwinUNETR
-from utils.data_utils import get_loader
+from _utils.data_utils import get_loader
 
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss, DiceLoss
@@ -42,13 +34,19 @@ from monai.metrics import DiceMetric
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils import set_determinism
 from monai.utils.enums import MetricReduction
+from utils import config
 
 # from unetr_og_change import UNETR_c
 
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
-parser.add_argument("--logdir", default="test", type=str, help="directory to save the tensorboard logs")
+parser.add_argument(
+    "--logdir",
+    default=Path(config.tensorboard_dir) / "pretrain" / "pretrain_dae",
+    type=str,
+    help="directory to save the tensorboard logs",
+)
 parser.add_argument(
     "--pretrained_dir", default="./pretrained_models/", type=str, help="pretrained checkpoint directory"
 )
@@ -56,7 +54,7 @@ parser.add_argument("--data_dir", default="/dataset/dataset0/", type=str, help="
 parser.add_argument("--json_list", default="dataset_0.json", type=str, help="dataset json file")
 parser.add_argument(
     "--pretrained_model_name",
-    default="swin_unetr.epoch.b4_5000ep_f48_lr2e-4_pretrained.pt",
+    default="ckpt_best.pth",
     type=str,
     help="pretrained model name",
 )
@@ -76,22 +74,22 @@ parser.add_argument("--rank", default=0, type=int, help="node rank for distribut
 parser.add_argument("--dist-url", default="tcp://127.0.0.1:23456", type=str, help="distributed url")
 parser.add_argument("--dist-backend", default="nccl", type=str, help="distributed backend")
 parser.add_argument("--workers", default=8, type=int, help="number of workers")
-parser.add_argument("--feature_size", default=48, type=int, help="feature size")
+parser.add_argument("--feature_size", default=config.vit_embed_dim, type=int, help="feature size")
 parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
-parser.add_argument("--out_channels", default=14, type=int, help="number of output channels")
+parser.add_argument("--out_channels", default=config.num_classes, type=int, help="number of output channels")
 parser.add_argument("--use_normal_dataset", action="store_true", help="use monai Dataset class")
 parser.add_argument("--a_min", default=-175.0, type=float, help="a_min in ScaleIntensityRanged")
 parser.add_argument("--a_max", default=250.0, type=float, help="a_max in ScaleIntensityRanged")
 parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
 parser.add_argument("--b_max", default=1.0, type=float, help="b_max in ScaleIntensityRanged")
-parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
-parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
-parser.add_argument("--space_z", default=2.0, type=float, help="spacing in z direction")
-parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
-parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
-parser.add_argument("--roi_z", default=96, type=int, help="roi size in z direction")
-parser.add_argument("--dropout_rate", default=0.0, type=float, help="dropout rate")
-parser.add_argument("--dropout_path_rate", default=0.0, type=float, help="drop path rate")
+parser.add_argument("--space_x", default=config.resample_spacing[0], type=float, help="spacing in x direction")
+parser.add_argument("--space_y", default=config.resample_spacing[1], type=float, help="spacing in y direction")
+parser.add_argument("--space_z", default=config.resample_spacing[2], type=float, help="spacing in z direction")
+parser.add_argument("--roi_x", default=config.patch_shape[0], type=int, help="roi size in x direction")
+parser.add_argument("--roi_y", default=config.patch_shape[1], type=int, help="roi size in y direction")
+parser.add_argument("--roi_z", default=config.patch_shape[2], type=int, help="roi size in z direction")
+parser.add_argument("--dropout_rate", default=config.vit_drop_rate, type=float, help="dropout rate")
+parser.add_argument("--dropout_path_rate", default=config.vit_dropout_path_rate, type=float, help="drop path rate")
 parser.add_argument("--RandFlipd_prob", default=0.2, type=float, help="RandFlipd aug probability")
 parser.add_argument("--RandRotate90d_prob", default=0.2, type=float, help="RandRotate90d aug probability")
 parser.add_argument("--RandScaleIntensityd_prob", default=0.1, type=float, help="RandScaleIntensityd aug probability")
@@ -105,24 +103,26 @@ parser.add_argument("--smooth_nr", default=0.0, type=float, help="constant added
 parser.add_argument("--use_checkpoint", action="store_true", help="use gradient checkpointing to save memory")
 parser.add_argument("--use_ssl_pretrained", action="store_true", help="use self-supervised pretrained weights")
 parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
-parser.add_argument("--model_name", default="unetr", type=str, help="spatial dimension of input data")
+parser.add_argument("--model_name", default="swin", type=str, help="spatial dimension of input data")
 parser.add_argument("--norm_name", default="instance", type=str, help="normalization layer type in decoder")
 parser.add_argument("--num_heads", default=12, type=int, help="number of attention heads in ViT encoder")
 parser.add_argument("--mlp_dim", default=3072, type=int, help="mlp dimention in ViT encoder")
-parser.add_argument("--hidden_size", default=768, type=int, help="hidden size dimention in ViT encoder")
+parser.add_argument(
+    "--hidden_size", default=config.vit_hidden_size, type=int, help="hidden size dimention in ViT encoder"
+)
 parser.add_argument("--pos_embed", default="perceptron", type=str, help="type of position embedding")
 parser.add_argument("--patch_merge_layer_index", default=6, type=int, help="type of position embedding")
 parser.add_argument("--patch_merge_num_tokens", default=8, type=int, help="type of position embedding")
 parser.add_argument("--load_dir", default="./pretrained/", type=str, help="load directory")
 parser.add_argument("--finetune_choice", default="both", type=str, help="Fine tune choice")
 parser.add_argument("--set_determ", default=True, type=bool, help="Set deterministic training")
-parser.add_argument("--seed", default=190, type=int, help="seed to change the deterministic randomness")
+parser.add_argument("--seed", default=42, type=int, help="seed to change the deterministic randomness")
 
 
 def main():
     args = parser.parse_args()
     args.amp = not args.noamp
-    args.logdir = "./runs/" + args.logdir
+    args.logdir = "./runs/" + str(args.logdir)
     determ = args.set_determ
 
     # deterministic training
@@ -154,7 +154,7 @@ def main_worker(gpu, args):
     torch.cuda.set_device(args.gpu)
     torch.backends.cudnn.benchmark = True
     args.test_mode = False
-    loader = get_loader(args)
+    # loader = get_loader(args)
     print(args.rank, " gpu", args.gpu)
     if args.rank == 0:
         print("Batch size is:", args.batch_size, "epochs", args.max_epochs)
@@ -163,6 +163,7 @@ def main_worker(gpu, args):
     pretrained_dir = args.pretrained_dir
 
     if args.model_name == "swin":
+        print("Using Swin UNETR")
         model = SwinUNETR(
             img_size=(args.roi_x, args.roi_y, args.roi_z),
             in_channels=args.in_channels,
@@ -189,6 +190,12 @@ def main_worker(gpu, args):
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
         model.load_state_dict(model_dict)
         print("Use pretrained weights")
+
+    # # print(model)
+    # for n, m in model.swinViT.named_modules():
+    #     print(n, sum(mm.numel() for mm in m.parameters()))
+
+    return model
 
     if args.use_ssl_pretrained:
         # pdb.set_trace()
@@ -285,5 +292,33 @@ def main_worker(gpu, args):
     return accuracy
 
 
+def get_model():
+    model = SwinUNETR(
+        img_size=config.patch_shape,
+        in_channels=1,
+        out_channels=config.num_classes,
+        feature_size=config.vit_embed_dim,
+        drop_rate=config.vit_drop_rate,
+        attn_drop_rate=config.vit_attn_drop_rate,
+        use_checkpoint=config.vit_use_checkpoint,
+    )
+
+    pretrained_dir = Path(config.tensorboard_dir) / "pretrain" / "pretrain_dae"
+    pretrained_model_name = "ckpt_best.pth"
+
+    model_dict = torch.load(os.path.join(pretrained_dir, pretrained_model_name))["model"]
+    # print(model_dict.keys())
+    model.load_state_dict(model_dict)
+    print("Use pretrained weights")
+    return model
+
+
 if __name__ == "__main__":
-    main()
+    args = parser.parse_args()
+    model = main_worker(0, args)
+
+    # model = get_model()
+    input = torch.randn(1, 1, 64, 64, 64)
+    output = model(input)
+    print(output.shape)
+    pass
