@@ -15,8 +15,8 @@ import os
 import nibabel as nib
 import numpy as np
 import torch
-from utils.data_utils import get_loader
-from utils.utils import dice, resample_3d
+from btcv_utils.data_utils import get_loader
+from btcv_utils.utils import dice, resample_3d
 
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import SwinUNETR

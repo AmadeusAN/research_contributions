@@ -19,7 +19,7 @@ import torch.nn.parallel
 import torch.utils.data.distributed
 from tensorboardX import SummaryWriter
 from torch.cuda.amp import GradScaler, autocast
-from utils.utils import AverageMeter, distributed_all_gather
+from btcv_utils.utils import AverageMeter, distributed_all_gather
 
 from monai.data import decollate_batch
 
@@ -142,14 +142,22 @@ def run_training(
     post_pred=None,
 ):
     writer = None
+
+    # 设置 writer
     if args.logdir is not None and args.rank == 0:
         writer = SummaryWriter(log_dir=args.logdir)
         if args.rank == 0:
             print("Writing Tensorboard logs to ", args.logdir)
     scaler = None
+
+    #  是否开启混合精度训练
     if args.amp:
         scaler = GradScaler()
+
+    # 最大验证指标
     val_acc_max = 0.0
+
+    # 训练 loop
     for epoch in range(start_epoch, args.max_epochs):
         if args.distributed:
             train_loader.sampler.set_epoch(epoch)
@@ -165,9 +173,14 @@ def run_training(
                 "loss: {:.4f}".format(train_loss),
                 "time {:.2f}s".format(time.time() - epoch_time),
             )
+
+        # 训练 loss 记录
         if args.rank == 0 and writer is not None:
             writer.add_scalar("train_loss", train_loss, epoch)
+
         b_new_best = False
+
+        # 每过 val_every 轮开始一次验证 loop
         if (epoch + 1) % args.val_every == 0:
             if args.distributed:
                 torch.distributed.barrier()
@@ -186,14 +199,20 @@ def run_training(
             val_avg_acc = np.mean(val_avg_acc)
 
             if args.rank == 0:
+
+                # 打印验证指标
                 print(
                     "Final validation  {}/{}".format(epoch, args.max_epochs - 1),
                     "acc",
                     val_avg_acc,
                     "time {:.2f}s".format(time.time() - epoch_time),
                 )
+
+                # 记录验证指标
                 if writer is not None:
                     writer.add_scalar("val_acc", val_avg_acc, epoch)
+
+                # 保存最佳验证指标的 checkpoint
                 if val_avg_acc > val_acc_max:
                     print("new best ({:.6f} --> {:.6f}). ".format(val_acc_max, val_avg_acc))
                     val_acc_max = val_avg_acc
@@ -202,6 +221,7 @@ def run_training(
                         save_checkpoint(
                             model, epoch, args, best_acc=val_acc_max, optimizer=optimizer, scheduler=scheduler
                         )
+            # 每一次验证不管指标涨没涨都会保存最新模型 checkpoint
             if args.rank == 0 and args.logdir is not None and args.save_checkpoint:
                 save_checkpoint(model, epoch, args, best_acc=val_acc_max, filename="model_final.pt")
                 if b_new_best:
@@ -213,4 +233,5 @@ def run_training(
 
     print("Training Finished !, Best Accuracy: ", val_acc_max)
 
+    # run_training 最终返回验证的最佳指标
     return val_acc_max
