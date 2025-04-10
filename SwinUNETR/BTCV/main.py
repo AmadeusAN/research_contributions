@@ -30,22 +30,31 @@ from monai.networks.nets import SwinUNETR
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 
-from utils import config
+from utils import config, WeightConvertor
 from pathlib import Path
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
+
+# 这里是从 checkpoint 中继续训练的位置，SwinUNETR 环境绑定
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
 parser.add_argument(
     "--logdir",
-    default=Path(config.tensorboard_dir) / "normal" / "BTCV_offical",
+    default=Path(config.tensorboard_dir) / "normal" / "p_custom_v11_BTCV_offical",
     type=str,
     help="directory to save the tensorboard logs",
 )
 parser.add_argument(
     "--pretrained_dir",
-    default=Path(config.tensorboard_dir) / "pretrain/pretrain_swinunetr_SwinUNETR",
+    default=Path(config.tensorboard_dir) / "pretrain/pretrain_custom_SwinUNETR_v11",
     type=str,
     help="pretrained checkpoint directory",
+)
+# parser.add_argument("--from_pretrain", action="store_false", help="是否加载预训练权重")
+parser.add_argument(
+    "--pretrained_model_name",
+    default="last_model.pth",
+    type=str,
+    help="pretrained model name",
 )
 parser.add_argument(
     "--data_dir",
@@ -58,13 +67,6 @@ parser.add_argument(
     default="/data/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/BTCV/RawData/dataset.json",
     type=str,
     help="dataset json file",
-)
-# parser.add_argument("--from_pretrain", action="store_false", help="是否加载预训练权重")
-parser.add_argument(
-    "--pretrained_model_name",
-    default="model_bestValRMSE.pt",
-    type=str,
-    help="pretrained model name",
 )
 parser.add_argument("--save_checkpoint", action="store_false", help="save checkpoint during training")
 parser.add_argument("--max_epochs", default=5000, type=int, help="max number of training epochs")
@@ -161,13 +163,16 @@ def main_worker(gpu, args):
         drop_rate=0.0,
         attn_drop_rate=0.0,
         dropout_path_rate=args.dropout_path_rate,
-        use_checkpoint=args.use_checkpoint,
+        use_checkpoint=config.vit_use_checkpoint,
     )
 
     if args.resume_ckpt:
-        model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
-        model.load_state_dict(model_dict)
-        print("Use pretrained weights")
+        model_dict = WeightConvertor.convert_from_custom_pretrain(
+            torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))
+        )
+        # model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
+        model.swinViT.load_state_dict(model_dict)
+        print("Use custom pretrained weights")
 
     if args.use_ssl_pretrained:
         try:
@@ -216,6 +221,7 @@ def main_worker(gpu, args):
     best_acc = 0
     start_epoch = 0
 
+    # 最后查看是否存在先前的存档点
     if args.checkpoint is not None:
         checkpoint = torch.load(args.checkpoint, map_location="cpu")
         from collections import OrderedDict
@@ -286,6 +292,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.amp = not args.noamp
     # args.logdir = "./runs/" + args.logdir
+
+    # 加载预训练权重
+    args.resume_ckpt = True
     if args.distributed:
         print(f"多GPU训练")
         args.ngpus_per_node = torch.cuda.device_count()
