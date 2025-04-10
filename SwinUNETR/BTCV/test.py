@@ -20,35 +20,52 @@ from btcv_utils.utils import dice, resample_3d
 
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import SwinUNETR
+from utils import config
+from pathlib import Path
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument(
-    "--pretrained_dir", default="./pretrained_models/", type=str, help="pretrained checkpoint directory"
+    "--pretrained_dir",
+    default=Path(config.tensorboard_dir) / "normal" / "BTCV_offical",
+    type=str,
+    help="pretrained checkpoint directory",
 )
-parser.add_argument("--data_dir", default="/dataset/dataset0/", type=str, help="dataset directory")
-parser.add_argument("--exp_name", default="test1", type=str, help="experiment name")
-parser.add_argument("--json_list", default="dataset_0.json", type=str, help="dataset json file")
+parser.add_argument(
+    "--data_dir",
+    default=Path(config.dataset_path) / "raw_dataset" / "BTCV" / "RawData",
+    type=str,
+    help="dataset directory",
+)
+parser.add_argument("--exp_name", default="test_offical", type=str, help="experiment name")
+parser.add_argument(
+    "--json_list",
+    default=Path(config.dataset_path) / "raw_dataset" / "BTCV" / "RawData" / "dataset.json",
+    type=str,
+    help="dataset json file",
+)
 parser.add_argument(
     "--pretrained_model_name",
-    default="swin_unetr.base_5000ep_f48_lr2e-4_pretrained.pt",
+    default="model_final.pt",
     type=str,
     help="pretrained model name",
 )
-parser.add_argument("--feature_size", default=48, type=int, help="feature size")
-parser.add_argument("--infer_overlap", default=0.5, type=float, help="sliding window inference overlap")
+parser.add_argument("--feature_size", default=config.vit_embed_dim, type=int, help="feature size")
+parser.add_argument(
+    "--infer_overlap", default=config.infer_overlap, type=float, help="sliding window inference overlap"
+)
 parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
 parser.add_argument("--out_channels", default=14, type=int, help="number of output channels")
 parser.add_argument("--a_min", default=-175.0, type=float, help="a_min in ScaleIntensityRanged")
 parser.add_argument("--a_max", default=250.0, type=float, help="a_max in ScaleIntensityRanged")
 parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
 parser.add_argument("--b_max", default=1.0, type=float, help="b_max in ScaleIntensityRanged")
-parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
-parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
-parser.add_argument("--space_z", default=2.0, type=float, help="spacing in z direction")
-parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
-parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
-parser.add_argument("--roi_z", default=96, type=int, help="roi size in z direction")
-parser.add_argument("--dropout_rate", default=0.0, type=float, help="dropout rate")
+parser.add_argument("--space_x", default=config.resample_spacing[0], type=float, help="spacing in x direction")
+parser.add_argument("--space_y", default=config.resample_spacing[1], type=float, help="spacing in y direction")
+parser.add_argument("--space_z", default=config.resample_spacing[2], type=float, help="spacing in z direction")
+parser.add_argument("--roi_x", default=config.patch_shape[0], type=int, help="roi size in x direction")
+parser.add_argument("--roi_y", default=config.patch_shape[1], type=int, help="roi size in y direction")
+parser.add_argument("--roi_z", default=config.patch_shape[2], type=int, help="roi size in z direction")
+parser.add_argument("--dropout_rate", default=config.vit_drop_rate, type=float, help="dropout rate")
 parser.add_argument("--distributed", action="store_true", help="start distributed training")
 parser.add_argument("--workers", default=8, type=int, help="number of workers")
 parser.add_argument("--RandFlipd_prob", default=0.2, type=float, help="RandFlipd aug probability")
