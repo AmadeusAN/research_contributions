@@ -69,6 +69,8 @@ class Sampler(torch.utils.data.Sampler):
 def get_loader(args):
     data_dir = args.data_dir
     datalist_json = os.path.join(data_dir, args.json_list)
+
+    # 训练集的 transform 几乎和我自己的一样
     train_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),
@@ -100,6 +102,8 @@ def get_loader(args):
             transforms.ToTensord(keys=["image", "label"]),
         ]
     )
+
+    # 验证集相对于训练集，取消了随机裁小块，以及数据增强，但是还是进行了前景裁剪
     val_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),
@@ -116,6 +120,7 @@ def get_loader(args):
         ]
     )
 
+    # 测试集取消了全景裁剪以及最开始的方向变换，对标签也没有进行重采样，仅对输入图像进行重采样。
     test_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),

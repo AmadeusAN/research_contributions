@@ -79,16 +79,18 @@ parser.add_argument("--use_checkpoint", action="store_true", help="use gradient 
 def main():
     args = parser.parse_args()
     args.test_mode = True
-    output_directory = "./outputs/" + args.exp_name
+    output_directory = Path(config.tensorboard_dir) / "output" / args.exp_name
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
+
+    # 获取验证的 dataloader
     val_loader = get_loader(args)
     pretrained_dir = args.pretrained_dir
     model_name = args.pretrained_model_name
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pretrained_pth = os.path.join(pretrained_dir, model_name)
     model = SwinUNETR(
-        img_size=96,
+        img_size=config.patch_shape[0],
         in_channels=args.in_channels,
         out_channels=args.out_channels,
         feature_size=args.feature_size,
@@ -97,7 +99,7 @@ def main():
         dropout_path_rate=0.0,
         use_checkpoint=args.use_checkpoint,
     )
-    model_dict = torch.load(pretrained_pth)["state_dict"]
+    model_dict = torch.load(pretrained_pth, weights_only=False)["state_dict"]
     model.load_state_dict(model_dict)
     model.eval()
     model.to(device)
@@ -106,10 +108,13 @@ def main():
         dice_list_case = []
         for i, batch in enumerate(val_loader):
             val_inputs, val_labels = (batch["image"].cuda(), batch["label"].cuda())
-            original_affine = batch["label_meta_dict"]["affine"][0].numpy()
+
+            # 为什么要获取原始的仿射矩阵
+            original_affine = batch["image"].meta["affine"][0].numpy()
             _, _, h, w, d = val_labels.shape
             target_shape = (h, w, d)
-            img_name = batch["image_meta_dict"]["filename_or_obj"][0].split("/")[-1]
+            img_name = batch["image"].meta["filename_or_obj"][0].split("/")[-1]
+
             print("Inference on case {}".format(img_name))
             val_outputs = sliding_window_inference(
                 val_inputs, (args.roi_x, args.roi_y, args.roi_z), 4, model, overlap=args.infer_overlap, mode="gaussian"
@@ -117,6 +122,8 @@ def main():
             val_outputs = torch.softmax(val_outputs, 1).cpu().numpy()
             val_outputs = np.argmax(val_outputs, axis=1).astype(np.uint8)[0]
             val_labels = val_labels.cpu().numpy()[0, 0, :, :, :]
+
+            # 由于没有对标签进行重采样，因此需要对模型的输出还原为原始大小。
             val_outputs = resample_3d(val_outputs, target_shape)
             dice_list_sub = []
             for i in range(1, 14):
