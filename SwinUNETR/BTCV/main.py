@@ -32,6 +32,7 @@ from monai.utils.enums import MetricReduction
 
 from utils import config, WeightConvertor
 from pathlib import Path
+from models import setup_model
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 
@@ -39,32 +40,32 @@ parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
 parser.add_argument(
     "--logdir",
-    default=Path(config.tensorboard_dir) / "normal" / "p_custom_v11_BTCV_offical",
+    default=Path(config.tensorboard_dir) / "normal" / "p_dae_BTCV_offical",
     type=str,
     help="directory to save the tensorboard logs",
 )
 parser.add_argument(
     "--pretrained_dir",
-    default=Path(config.tensorboard_dir) / "pretrain/pretrain_custom_SwinUNETR_v11",
+    default=Path(config.tensorboard_dir) / "pretrain/pretrain_swinmm_SwinUNETR",
     type=str,
     help="pretrained checkpoint directory",
 )
 # parser.add_argument("--from_pretrain", action="store_false", help="是否加载预训练权重")
 parser.add_argument(
     "--pretrained_model_name",
-    default="last_model.pth",
+    default="testfinal_model.pth",
     type=str,
     help="pretrained model name",
 )
 parser.add_argument(
     "--data_dir",
-    default="/data/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/BTCV/RawData",
+    default="/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/BTCV/RawData",
     type=str,
     help="dataset directory",
 )
 parser.add_argument(
     "--json_list",
-    default="/data/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/BTCV/RawData/dataset.json",
+    default="/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/BTCV/RawData/dataset.json",
     type=str,
     help="dataset json file",
 )
@@ -142,6 +143,9 @@ def main_worker(gpu, args):
         dist.init_process_group(
             backend=args.dist_backend, init_method=args.dist_url, world_size=args.world_size, rank=args.rank
         )
+    # 不能随便修改 rank，有一些指标和权重的保存仅在 rank 0 上启用。
+    # else:
+    #     args.rank = config.gpu_id
 
     torch.cuda.set_device(args.gpu)
     torch.backends.cudnn.benchmark = True
@@ -155,24 +159,32 @@ def main_worker(gpu, args):
     inf_size = [args.roi_x, args.roi_y, args.roi_z]
 
     pretrained_dir = args.pretrained_dir
-    model = SwinUNETR(
-        img_size=(args.roi_x, args.roi_y, args.roi_z),
-        in_channels=args.in_channels,
-        out_channels=args.out_channels,
-        feature_size=args.feature_size,
-        drop_rate=0.0,
-        attn_drop_rate=0.0,
-        dropout_path_rate=args.dropout_path_rate,
-        use_checkpoint=config.vit_use_checkpoint,
-    )
+
+    if config.model_name not in ["DAE", "GVSL"]:
+        model = SwinUNETR(
+            img_size=(args.roi_x, args.roi_y, args.roi_z),
+            in_channels=args.in_channels,
+            out_channels=args.out_channels,
+            feature_size=args.feature_size,
+            drop_rate=0.0,
+            attn_drop_rate=0.0,
+            dropout_path_rate=args.dropout_path_rate,
+            use_checkpoint=config.vit_use_checkpoint,
+        )
+    else:
+        model = setup_model()
 
     if args.resume_ckpt:
-        model_dict = WeightConvertor.convert_from_custom_pretrain(
-            torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))
+        model_dict = WeightConvertor.convert_form_swinmm(
+            torch.load(os.path.join(pretrained_dir, args.pretrained_model_name), weights_only=False)
         )
         # model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
         model.swinViT.load_state_dict(model_dict)
         print("Use custom pretrained weights")
+    elif ~args.resume_ckpt and config.model_name in ["DAE", "GVSL"]:
+        print(f"training from {config.model_name}")
+    else:
+        print("training from scrach")
 
     if args.use_ssl_pretrained:
         try:
@@ -293,8 +305,6 @@ if __name__ == "__main__":
     args.amp = not args.noamp
     # args.logdir = "./runs/" + args.logdir
 
-    # 加载预训练权重
-    args.resume_ckpt = True
     if args.distributed:
         print(f"多GPU训练")
         args.ngpus_per_node = torch.cuda.device_count()
