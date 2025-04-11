@@ -39,20 +39,20 @@ parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
 parser.add_argument(
     "--logdir",
-    default=Path(config.tensorboard_dir) / "normal" / "p_custom_v11_BTCV_offical",
+    default=Path(config.tensorboard_dir) / "normal" / "p_swinunetr_BTCV_offical",
     type=str,
     help="directory to save the tensorboard logs",
 )
 parser.add_argument(
     "--pretrained_dir",
-    default=Path(config.tensorboard_dir) / "pretrain/pretrain_custom_SwinUNETR_v11",
+    default=Path(config.tensorboard_dir) / "pretrain/pretrain_swinunetr_SwinUNETR",
     type=str,
     help="pretrained checkpoint directory",
 )
 # parser.add_argument("--from_pretrain", action="store_false", help="是否加载预训练权重")
 parser.add_argument(
     "--pretrained_model_name",
-    default="last_model.pth",
+    default="model_bestValRMSE.pt",
     type=str,
     help="pretrained model name",
 )
@@ -167,8 +167,8 @@ def main_worker(gpu, args):
     )
 
     if args.resume_ckpt:
-        model_dict = WeightConvertor.convert_from_custom_pretrain(
-            torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))
+        model_dict = WeightConvertor.convert_from_swinunetr(
+            torch.load(os.path.join(pretrained_dir, args.pretrained_model_name), weights_only=False)
         )
         # model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
         model.swinViT.load_state_dict(model_dict)
