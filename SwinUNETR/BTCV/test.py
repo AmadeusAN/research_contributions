@@ -26,7 +26,7 @@ from pathlib import Path
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument(
     "--pretrained_dir",
-    default=Path(config.tensorboard_dir) / "normal" / "BTCV_offical",
+    default=Path(config.tensorboard_dir) / "normal" / "p_voco_BTCV_offical",
     type=str,
     help="pretrained checkpoint directory",
 )
@@ -45,7 +45,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--pretrained_model_name",
-    default="model_final.pt",
+    default="model.pt",
     type=str,
     help="pretrained model name",
 )
