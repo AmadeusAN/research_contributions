@@ -37,16 +37,20 @@ from models import setup_model
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 
 # 这里是从 checkpoint 中继续训练的位置，SwinUNETR 环境绑定
-parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
+parser.add_argument(
+    "--checkpoint",
+    default=None,
+    help="start training from saved checkpoint",
+)
 parser.add_argument(
     "--logdir",
-    default=Path(config.tensorboard_dir) / "normal" / "p_custom_v14_BTCV_offical",
+    default=Path(config.tensorboard_dir) / "normal" / "p_custom_v15_BTCV_offical",
     type=str,
     help="directory to save the tensorboard logs",
 )
 parser.add_argument(
     "--pretrained_dir",
-    default=Path(config.tensorboard_dir) / "pretrain/pretrain_custom_SwinUNETR_v14",
+    default=Path(config.tensorboard_dir) / "pretrain/pretrain_custom_SwinUNETR_v15",
     type=str,
     help="pretrained checkpoint directory",
 )
@@ -178,7 +182,11 @@ def main_worker(gpu, args):
 
     if args.resume_ckpt:
         model_dict = WeightConvertor.convert_from_custom_pretrain(
-            torch.load(os.path.join(pretrained_dir, args.pretrained_model_name), weights_only=False)
+            torch.load(
+                os.path.join(pretrained_dir, args.pretrained_model_name),
+                map_location=f"cuda:{config.gpu_id}",
+                weights_only=False,
+            )
         )
         # model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
         model.swinViT.load_state_dict(model_dict)
@@ -237,7 +245,7 @@ def main_worker(gpu, args):
 
     # 最后查看是否存在先前的存档点
     if args.checkpoint is not None:
-        checkpoint = torch.load(args.checkpoint, map_location="cpu")
+        checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
         from collections import OrderedDict
 
         new_state_dict = OrderedDict()
