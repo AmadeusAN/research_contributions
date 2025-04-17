@@ -353,16 +353,14 @@ def build_loader_simmim(args):
     #     print("Dataset all validation: number of data: {}".format(len(val_files)))
 
     d = config.project_path
-    # manifest1 = Path(d) / "dataset/raw_dataset/AMOS/amos22/dataset.json"
-    # manifest2 = Path(d) / "dataset/raw_dataset/LITS/media/nas/01_Datasets/CT/LITS/dataset.json"
-    # manifest3 = Path(d) / "dataset/raw_dataset/abdomenct1k/dataset.json"
+    manifest1 = Path(d) / "dataset/raw_dataset/AMOS/amos22/dataset.json"
+    manifest2 = Path(d) / "dataset/raw_dataset/LITS/media/nas/01_Datasets/CT/LITS/dataset.json"
+    manifest3 = Path(d) / "dataset/raw_dataset/abdomenct1k/dataset.json"
 
-    manifest4 = Path(d) / "dataset/raw_dataset/RAOS/RAOS-Real/CancerImages(Set1)/dataset.json"
+    # manifest4 = Path(d) / "dataset/raw_dataset/RAOS/RAOS-Real/CancerImages(Set1)/dataset.json"
 
     manifest_list = [
-        # load_decathlon_datalist(manifest, False, "training") for manifest in [manifest1, manifest2, manifest3]
-        load_decathlon_datalist(manifest, False, "training")
-        for manifest in [manifest4]
+        load_decathlon_datalist(manifest, False, "training") for manifest in [manifest1, manifest2, manifest3]
     ]
     train_list = list(chain.from_iterable(manifest_list))
     datalist, val_files = train_test_split(train_list, test_size=0.2, random_state=42)
