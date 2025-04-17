@@ -25,6 +25,8 @@ from torch.cuda.amp import GradScaler, autocast
 from torch.nn.parallel import DistributedDataParallel
 from SwinMM_utils import view_ops, view_transforms
 from SwinMM_utils.data_utils import get_loader
+from utils import config
+from pathlib import Path
 
 # from SwinMM_utils.dataset_in_memory import hijack_bagua_serialization
 from SwinMM_utils.ops import mask_rand_patch
@@ -162,13 +164,18 @@ def main():
         return global_step, loss, val_best
 
     parser = argparse.ArgumentParser(description="PyTorch Training")
-    parser.add_argument("--logdir", default="test", type=str, help="directory to save the tensorboard logs")
+    parser.add_argument(
+        "--logdir",
+        default="pretrain_swinmm",
+        type=str,
+        help="directory to save the tensorboard logs",
+    )
     parser.add_argument("--epochs", default=100, type=int, help="number of training epochs")
     parser.add_argument("--num_steps", default=100000, type=int, help="number of training iterations")
     parser.add_argument("--eval_num", default=100, type=int, help="evaluation frequency")
     parser.add_argument("--warmup_steps", default=500, type=int, help="warmup steps")
     parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
-    parser.add_argument("--feature_size", default=36, type=int, help="embedding size")
+    parser.add_argument("--feature_size", default=config.vit_embed_dim, type=int, help="embedding size")
     parser.add_argument("--dropout_path_rate", default=0.0, type=float, help="drop path rate")
     parser.add_argument("--use_checkpoint", action="store_true", help="use gradient checkpointing to save memory")
     parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
@@ -214,7 +221,7 @@ def main():
     parser.add_argument("--workers", default=16, type=int, help="number of workers")
 
     args = parser.parse_args()
-    logdir = "./runs/" + args.logdir
+    logdir = Path(config.project_path) / "tensorboard_log/pretrain" / args.logdir
     args.amp = not args.noamp
     args.lr = args.lr * args.batch_size / 2
     torch.backends.cudnn.benchmark = True

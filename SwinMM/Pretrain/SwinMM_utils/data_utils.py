@@ -29,6 +29,7 @@ from monai.transforms import (
 from pathlib import Path
 import json
 from itertools import chain
+from utils import config
 
 
 def get_loader(args):
@@ -145,11 +146,12 @@ def get_loader(args):
     # print("Dataset all training: number of data: {}".format(len(datalist)))
 
     # convert to custom dataset
-    manifest1 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/RAOS/RAOS-Real/CancerImages(Set1)/dataset.json"
-    manifest2 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/LITS/media/nas/01_Datasets/CT/LITS/dataset.json"
-    manifest3 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/abdomenct1k/dataset.json"
+    manifest1 = Path(config.project_path) / "dataset/raw_dataset/AMOS/amos22/dataset.json"
+    manifest2 = Path(config.project_path) / "dataset/raw_dataset/LITS/media/nas/01_Datasets/CT/LITS/dataset.json"
+    manifest3 = Path(config.project_path) / "dataset/raw_dataset/abdomenct1k/dataset.json"
+    # manifest4 = Path(config.project_path) / "dataset/raw_dataset/RAOS/RAOS-Real/CancerImages(Set1)/dataset.json"
 
-    manifest_list = [manifest1, manifest2, manifest3]
+    # manifest_list = [manifest1, manifest2, manifest3]
     manifest_list = [
         load_decathlon_datalist(manifest, False, "training") for manifest in [manifest1, manifest2, manifest3]
     ]
