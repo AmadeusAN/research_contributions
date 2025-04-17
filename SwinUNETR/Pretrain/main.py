@@ -27,7 +27,6 @@ from _utils.data_utils import get_loader
 from _utils.ops import aug_rand, rot_rand
 from models import setup_model
 from utils import config
-from data import setup_pretraining_data_SwinUNETR
 
 import torch
 import torch.nn.functional as F
@@ -211,11 +210,14 @@ def main():
     args = parser.parse_args()
     logdir = os.path.join(config.tensorboard_dir, args.logdir)
     args.amp = not args.noamp
+
     torch.backends.cudnn.benchmark = True
     torch.autograd.set_detect_anomaly(True)
     args.distributed = False
+
     if "WORLD_SIZE" in os.environ:
         args.distributed = int(os.environ["WORLD_SIZE"]) > 1
+
     args.device = "cuda:0"
     args.world_size = 1
     args.rank = 0

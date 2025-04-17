@@ -26,11 +26,11 @@ from monai.transforms import (
     ToTensord,
 )
 
-from data import setup_data, setup_pretraining_data_SwinUNETR
 from pathlib import Path
 import json
 from sklearn.model_selection import train_test_split
 from itertools import chain
+from utils import config
 
 
 def get_loader(args):
@@ -73,13 +73,12 @@ def get_loader(args):
     # datalist = new_datalist1 + datalist2 + datalist3 + datalist4 + datalist5
     # val_files = vallist1 + vallist2 + vallist3 + vallist4 + vallist5
 
-    manifest1 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/RAOS/RAOS-Real/CancerImages(Set1)/dataset.json"
-    manifest2 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/LITS/media/nas/01_Datasets/CT/LITS/dataset.json"
-    manifest3 = "/public1/cjh/workspace/AbdominalSegmentation/dataset/raw_dataset/abdomenct1k/dataset.json"
+    # manifest1 = Path(config.project_path) / "dataset/raw_dataset/AMOS/amos22/dataset.json"
+    # manifest2 = Path(config.project_path) / "dataset/raw_dataset/LITS/media/nas/01_Datasets/CT/LITS/dataset.json"
+    # manifest3 = Path(config.project_path) / "dataset/raw_dataset/abdomenct1k/dataset.json"
+    manifest4 = Path(config.project_path) / "dataset/raw_dataset/RAOS/RAOS-Real/CancerImages(Set1)/dataset.json"
 
-    manifest_list = [
-        load_decathlon_datalist(manifest, False, "training") for manifest in [manifest1, manifest2, manifest3]
-    ]
+    manifest_list = [load_decathlon_datalist(manifest, False, "training") for manifest in [manifest4]]
     train_list = list(chain.from_iterable(manifest_list))
     train_list, val_list = train_test_split(train_list, test_size=0.2, random_state=42)
     datalist = []
