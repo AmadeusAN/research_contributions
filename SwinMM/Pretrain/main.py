@@ -154,13 +154,13 @@ def main():
             else:
                 val_cond = global_step % args.eval_num == 0
 
-            if val_cond and global_step % 1000 == 0:
+            if val_cond and global_step % 1 == 0:
                 checkpoint = {
                     "global_step": global_step,
                     "state_dict": model.state_dict(),
                     "optimizer": optimizer.state_dict(),
                 }
-                save_ckpt(checkpoint, logdir + "/model_{}.pt".format(global_step))
+                save_ckpt(checkpoint, str(logdir) + "/model_{}.pt".format(global_step))
         return global_step, loss, val_best
 
     parser = argparse.ArgumentParser(description="PyTorch Training")
