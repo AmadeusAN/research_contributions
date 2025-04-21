@@ -36,7 +36,7 @@ class TensorboardLogger(object):
 
     def update_img(self, head="images", step=None, **kwargs):
         for k, v in kwargs.items():
-            self.writer.add_image(head + "/" + k, v, self.step if step is None else step)
+            self.writer.add_image(head + "/" + k, torch.tensor(v), self.step if step is None else step)
 
     def flush(self):
         self.writer.flush()
