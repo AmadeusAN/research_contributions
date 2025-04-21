@@ -317,8 +317,8 @@ def main():
             torch.save(model.state_dict(), logdir + "final_model.pth")
         dist.destroy_process_group()
     else:
-        torch.save(model.state_dict(), logdir + "final_model.pth")
-    save_ckpt(checkpoint, logdir + "/model_final_epoch.pt")
+        torch.save(model.state_dict(), str(logdir) + "final_model.pth")
+    save_ckpt(checkpoint, str(logdir) + "/model_final_epoch.pt")
 
 
 if __name__ == "__main__":
