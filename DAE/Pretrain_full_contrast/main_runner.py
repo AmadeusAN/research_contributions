@@ -90,8 +90,8 @@ def parse_option():
     parser.add_argument("--onlycovid", default=False, action="store_true")
 
     parser.add_argument("--cache_rate", default=0.5, type=float, help="drop path rate")
-    parser.add_argument("--batch_size", default=4, type=int, help="batch size for single GPU")
-    parser.add_argument("--sw_batch_size", default=1, type=int, help="batch size for single GPU")
+    parser.add_argument("--batch_size", default=10, type=int, help="batch size for single GPU")
+    parser.add_argument("--sw_batch_size", default=4, type=int, help="batch size for single GPU")
     parser.add_argument("--data-path", type=str, help="path to dataset")
     parser.add_argument(
         "--log_dir",
