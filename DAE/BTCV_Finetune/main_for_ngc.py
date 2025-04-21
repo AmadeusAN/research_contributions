@@ -43,7 +43,7 @@ parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
 parser.add_argument(
     "--logdir",
-    default=Path(config.tensorboard_dir) / "pretrain" / "pretrain_dae",
+    default=Path(config.tensorboard_dir) / "pretrain" / "pretrain_dae_RAOS",
     type=str,
     help="directory to save the tensorboard logs",
 )
