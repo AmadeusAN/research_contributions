@@ -80,6 +80,7 @@ class SSLHead(nn.Module):
 
     def forward(self, x):
         x_out = self.swinViT(x.contiguous())[4]
+        # _, 576, 2, 2, 2
         _, c, h, w, d = x_out.shape
         x4_reshape = x_out.flatten(start_dim=2, end_dim=4)
         x4_reshape = x4_reshape.transpose(1, 2)
@@ -91,3 +92,20 @@ class SSLHead(nn.Module):
         x_rec = x_rec.view(-1, c, h, w, d)
         x_rec = self.conv(x_rec)
         return x_rot, x_contrastive, x_rec
+
+
+if __name__ == "__main__":
+    args = OmegaConf.create(
+        {
+            "spatial_dims": 3,
+            "in_channels": 1,
+            "feature_size": 36,
+            "dropout_path_rate": 0.0,
+            "use_checkpoint": False,
+        }
+    )
+
+    model = SSLHead(args=args)
+    input = torch.rand(size=(2, 1, 64, 64, 64))
+    print(model(input))
+    # print(model)
