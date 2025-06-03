@@ -30,12 +30,13 @@ from pathlib import Path
 
 # from SwinMM_utils.dataset_in_memory import hijack_bagua_serialization
 from SwinMM_utils.ops import mask_rand_patch
+from thop import profile, clever_format
 
 # torch
 torch.multiprocessing.set_sharing_strategy("file_system")
 
 
-def main():
+def main(thop_test: bool = False):
     def save_ckpt(state, checkpoint_dir):
         torch.save(state, checkpoint_dir)
 
@@ -61,6 +62,17 @@ def main():
             x1_masked_permuted, x2_masked_permuted = [
                 view_transforms.permutation_transforms[vn](val) for vn, val in zip(permutations, [x1_masked, x2_masked])
             ]
+
+            if thop_test:
+                b = x.shape[0]
+                print(f"batch size is {b}")
+                model.cpu()
+                x1_masked = x1_masked.cpu()
+                macs, params = profile(model, inputs=(x1_masked,))
+                macs, params = macs / b * 4, params / b * 4
+                macs, params = clever_format([macs, params], "%.3f")
+                print(macs, params)
+                return
 
             with autocast(enabled=args.amp):
                 rot1_p, contrastive1_p, rec_x1 = model(x1_masked)
@@ -310,6 +322,9 @@ def main():
         scaler = None
     while global_step < args.num_steps:
         global_step, loss, best_val = train(args, global_step, train_loader, best_val, scaler)
+        if thop_test:
+            print(f"thop test execed")
+            return
     checkpoint = {"epoch": args.epochs, "state_dict": model.state_dict(), "optimizer": optimizer.state_dict()}
 
     if args.distributed:
@@ -322,4 +337,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(thop_test=True)

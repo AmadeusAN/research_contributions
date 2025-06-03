@@ -28,6 +28,9 @@ from dae_utils import (
 )
 from utils import config
 from pathlib import Path
+from thop import profile, clever_format
+
+thop_test = True
 
 try:
     # noinspection PyUnresolvedReferences
@@ -209,6 +212,9 @@ def main(args):
         #     data_loader_train.sampler.set_epoch(epoch)
         # train_loss_avg, train_L1_avg, train_MM_avg = train_one_epoch(
         train_loss_avg, train_L1_avg = train_one_epoch(args, model, data_loader_train, optimizer, epoch, lr_scheduler)
+        if thop_test:
+            return
+
         #
         val_loss_avg, val_L1_avg, x_orig, x_recon, x_masked = validate(data_loader_val, model)
         x_orig = torch.cat(x_orig, dim=0)[:2]
@@ -281,6 +287,15 @@ def train_one_epoch(args, model, data_loader, optimizer, epoch, lr_scheduler):
             loss, _, _ = model(img, mask, img, cl_type)
         elif args.choice == "denoise":
             # loss1, loss2, _, _ = model(img_noisy, mask, img, cl_type)
+            if thop_test:
+                img_noisy, mask, img = img_noisy.cpu(), mask.cpu(), img.cpu()
+                model.cpu()
+                macs, params = profile(model, inputs=(img_noisy, mask, img))
+                macs, params = macs / B, params / B
+                macs, params = clever_format([macs, params], "%.3f")
+                print(macs, params)
+                return
+
             loss1, _, _ = model(img_noisy, mask, img)
         elif args.choice == "superres":
             img_lowres = F.interpolate(
