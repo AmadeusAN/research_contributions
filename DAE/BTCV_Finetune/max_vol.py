@@ -22,7 +22,7 @@ import torch.nn.parallel
 import torch.utils.data.distributed
 from fvcore.nn import FlopCountAnalysis
 from optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
-from trainer import run_training
+from net.research_contributions.DAE.BTCV_Finetune._trainer import run_training
 from unetr import UNETR as UNETR_tok
 from unetr_original import UNETR
 from unetr_patchmerger import UNETR as UNETR_patch

@@ -16,7 +16,101 @@ import numpy as np
 import torch
 
 from monai import data, transforms
+from monai.transforms import EnsureChannelFirstd
 from monai.data import load_decathlon_datalist
+
+import sys
+
+from pathlib import Path
+from itertools import chain
+from utils import config
+from sklearn.model_selection import train_test_split
+
+import argparse
+
+parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
+parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
+parser.add_argument(
+    "--logdir",
+    default=Path(config.tensorboard_dir) / "pretrain" / "pretrain_dae_RAOS",
+    type=str,
+    help="directory to save the tensorboard logs",
+)
+parser.add_argument(
+    "--pretrained_dir", default="./pretrained_models/", type=str, help="pretrained checkpoint directory"
+)
+parser.add_argument("--data_dir", default="/dataset/dataset0/", type=str, help="dataset directory")
+parser.add_argument("--json_list", default="dataset_0.json", type=str, help="dataset json file")
+parser.add_argument(
+    "--pretrained_model_name",
+    default="ckpt_best.pth",
+    type=str,
+    help="pretrained model name",
+)
+parser.add_argument("--save_checkpoint", action="store_true", help="save checkpoint during training")
+parser.add_argument("--max_epochs", default=5000, type=int, help="max number of training epochs")
+parser.add_argument("--batch_size", default=1, type=int, help="number of batch size")
+parser.add_argument("--sw_batch_size", default=4, type=int, help="number of sliding window batch size")
+parser.add_argument("--optim_lr", default=1e-4, type=float, help="optimization learning rate")
+parser.add_argument("--optim_name", default="adamw", type=str, help="optimization algorithm")
+parser.add_argument("--reg_weight", default=1e-5, type=float, help="regularization weight")
+parser.add_argument("--momentum", default=0.99, type=float, help="momentum")
+parser.add_argument("--noamp", action="store_true", help="do NOT use amp for training")
+parser.add_argument("--val_every", default=100, type=int, help="validation frequency")
+parser.add_argument("--distributed", action="store_true", help="start distributed training")
+parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")
+parser.add_argument("--rank", default=0, type=int, help="node rank for distributed training")
+parser.add_argument("--dist-url", default="tcp://127.0.0.1:23456", type=str, help="distributed url")
+parser.add_argument("--dist-backend", default="nccl", type=str, help="distributed backend")
+parser.add_argument("--workers", default=8, type=int, help="number of workers")
+parser.add_argument("--feature_size", default=config.vit_embed_dim, type=int, help="feature size")
+parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
+parser.add_argument("--out_channels", default=config.num_classes, type=int, help="number of output channels")
+parser.add_argument("--use_normal_dataset", action="store_false", help="use monai Dataset class")
+parser.add_argument("--a_min", default=-175.0, type=float, help="a_min in ScaleIntensityRanged")
+parser.add_argument("--a_max", default=250.0, type=float, help="a_max in ScaleIntensityRanged")
+parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
+parser.add_argument("--b_max", default=1.0, type=float, help="b_max in ScaleIntensityRanged")
+parser.add_argument("--space_x", default=config.resample_spacing[0], type=float, help="spacing in x direction")
+parser.add_argument("--space_y", default=config.resample_spacing[1], type=float, help="spacing in y direction")
+parser.add_argument("--space_z", default=config.resample_spacing[2], type=float, help="spacing in z direction")
+parser.add_argument("--roi_x", default=config.patch_shape[0], type=int, help="roi size in x direction")
+parser.add_argument("--roi_y", default=config.patch_shape[1], type=int, help="roi size in y direction")
+parser.add_argument("--roi_z", default=config.patch_shape[2], type=int, help="roi size in z direction")
+parser.add_argument("--dropout_rate", default=config.vit_drop_rate, type=float, help="dropout rate")
+parser.add_argument("--dropout_path_rate", default=config.vit_dropout_path_rate, type=float, help="drop path rate")
+parser.add_argument("--RandFlipd_prob", default=0.2, type=float, help="RandFlipd aug probability")
+parser.add_argument("--RandRotate90d_prob", default=0.2, type=float, help="RandRotate90d aug probability")
+parser.add_argument("--RandScaleIntensityd_prob", default=0.1, type=float, help="RandScaleIntensityd aug probability")
+parser.add_argument("--RandShiftIntensityd_prob", default=0.1, type=float, help="RandShiftIntensityd aug probability")
+parser.add_argument("--infer_overlap", default=0.5, type=float, help="sliding window inference overlap")
+parser.add_argument("--lrschedule", default="warmup_cosine", type=str, help="type of learning rate scheduler")
+parser.add_argument("--warmup_epochs", default=50, type=int, help="number of warmup epochs")
+parser.add_argument("--resume_ckpt", action="store_true", help="resume training from pretrained checkpoint")
+parser.add_argument("--smooth_dr", default=1e-6, type=float, help="constant added to dice denominator to avoid nan")
+parser.add_argument("--smooth_nr", default=0.0, type=float, help="constant added to dice numerator to avoid zero")
+parser.add_argument("--use_checkpoint", action="store_true", help="use gradient checkpointing to save memory")
+parser.add_argument("--use_ssl_pretrained", action="store_false", help="use self-supervised pretrained weights")
+parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
+parser.add_argument("--model_name", default="swin", type=str, help="spatial dimension of input data")
+parser.add_argument("--norm_name", default="instance", type=str, help="normalization layer type in decoder")
+parser.add_argument("--num_heads", default=12, type=int, help="number of attention heads in ViT encoder")
+parser.add_argument("--mlp_dim", default=3072, type=int, help="mlp dimention in ViT encoder")
+parser.add_argument(
+    "--hidden_size", default=config.vit_hidden_size, type=int, help="hidden size dimention in ViT encoder"
+)
+parser.add_argument("--pos_embed", default="perceptron", type=str, help="type of position embedding")
+parser.add_argument("--patch_merge_layer_index", default=6, type=int, help="type of position embedding")
+parser.add_argument("--patch_merge_num_tokens", default=8, type=int, help="type of position embedding")
+parser.add_argument(
+    "--load_dir",
+    default=Path(config.tensorboard_dir) / "AMOS" / "pretrain_AMOS" / "pretrain_dae",
+    type=str,
+    help="load directory",
+)
+parser.add_argument("--finetune_choice", default="both", type=str, help="Fine tune choice")
+parser.add_argument("--set_determ", default=True, type=bool, help="Set deterministic training")
+parser.add_argument("--seed", default=42, type=int, help="seed to change the deterministic randomness")
 
 
 class Sampler(torch.utils.data.Sampler):
@@ -67,12 +161,24 @@ class Sampler(torch.utils.data.Sampler):
 
 
 def get_loader(args):
-    data_dir = args.data_dir
-    datalist_json = os.path.join(data_dir, args.json_list)
+
+    d = Path(config.project_path)
+    manifest1 = d / "dataset/raw_dataset/RAOS/RAOS-Real/CancerImages(Set1)/dataset.json"
+    manifest2 = d / "dataset/raw_dataset/LITS/media/nas/01_Datasets/CT/LITS/dataset.json"
+    manifest3 = d / "dataset/raw_dataset/abdomenct1k/dataset.json"
+
+    manifest_list = [
+        load_decathlon_datalist(manifest, False, "training") for manifest in [manifest1, manifest2, manifest3]
+    ]
+    datalist = list(chain.from_iterable(manifest_list))
+
+    datalist, val_files = train_test_split(datalist, test_size=0.2, random_state=42)
+    # data_dir = args.data_dir
+    # datalist_json = os.path.join(data_dir, args.json_list)
     train_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),
-            transforms.AddChanneld(keys=["image", "label"]),
+            transforms.EnsureChannelFirstd(keys=["image", "label"]),
             transforms.Orientationd(keys=["image", "label"], axcodes="RAS"),
             transforms.Spacingd(
                 keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
@@ -103,7 +209,7 @@ def get_loader(args):
     val_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),
-            transforms.AddChanneld(keys=["image", "label"]),
+            transforms.EnsureChannelFirstd(keys=["image", "label"]),
             transforms.Orientationd(keys=["image", "label"], axcodes="RAS"),
             transforms.Spacingd(
                 keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
@@ -119,7 +225,7 @@ def get_loader(args):
     test_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),
-            transforms.AddChanneld(keys=["image", "label"]),
+            transforms.EnsureChannelFirstd(keys=["image", "label"]),
             transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
             transforms.ScaleIntensityRanged(
                 keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
@@ -127,7 +233,7 @@ def get_loader(args):
             transforms.ToTensord(keys=["image", "label"]),
         ]
     )
-
+    args.test_mode = False
     if args.test_mode:
         test_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
         test_ds = data.Dataset(data=test_files, transform=test_transform)
@@ -143,7 +249,9 @@ def get_loader(args):
         )
         loader = test_loader
     else:
-        datalist = load_decathlon_datalist(datalist_json, True, "training", base_dir=data_dir)
+        # datalist = load_decathlon_datalist(datalist_json, True, "training", base_dir=data_dir)
+        # datalist = load_decathlon_datalist(datalist_json, True, "training")
+
         if args.use_normal_dataset:
             train_ds = data.Dataset(data=datalist, transform=train_transform)
         else:
@@ -159,7 +267,7 @@ def get_loader(args):
             sampler=train_sampler,
             pin_memory=True,
         )
-        val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+        # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
         val_ds = data.Dataset(data=val_files, transform=val_transform)
         val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
         val_loader = data.DataLoader(
@@ -168,3 +276,9 @@ def get_loader(args):
         loader = [train_loader, val_loader]
 
     return loader
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    _ = get_loader(args)
+    pass

@@ -21,7 +21,7 @@ import torch.nn.parallel
 import torch.utils.data.distributed
 from optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 from swin_unetr_og import SwinUNETR
-from trainer import run_training
+from net.research_contributions.DAE.BTCV_Finetune._trainer import run_training
 from unetr import UNETR as UNETR_tok
 from unetr_og import UNETR
 from unetr_patchmerger import UNETR as UNETR_patch

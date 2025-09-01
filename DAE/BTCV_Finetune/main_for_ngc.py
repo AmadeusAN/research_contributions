@@ -23,7 +23,7 @@ import torch.nn.parallel
 import torch.utils.data.distributed
 from .optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 from .swin_unetr_og import SwinUNETR, SwinUNETR_OG
-from .trainer import run_training
+from ._trainer import run_training
 
 # from monai.networks.nets import SwinUNETR
 from ._utils.data_utils import get_loader
@@ -43,12 +43,15 @@ parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
 parser.add_argument(
     "--logdir",
-    default=Path(config.tensorboard_dir) / "pretrain" / "pretrain_dae_RAOS",
+    default=r"/public/cjh/workspace/AbdominalSegmentation/tensorboard_log/pretrain/pretrain_dae",
     type=str,
     help="directory to save the tensorboard logs",
 )
 parser.add_argument(
-    "--pretrained_dir", default="./pretrained_models/", type=str, help="pretrained checkpoint directory"
+    "--pretrained_dir",
+    default=r"/public/cjh/workspace/AbdominalSegmentation/tensorboard_log/pretrain/pretrain_dae",
+    type=str,
+    help="pretrained checkpoint directory",
 )
 parser.add_argument("--data_dir", default="/dataset/dataset0/", type=str, help="dataset directory")
 parser.add_argument("--json_list", default="dataset_0.json", type=str, help="dataset json file")
@@ -58,11 +61,11 @@ parser.add_argument(
     type=str,
     help="pretrained model name",
 )
-parser.add_argument("--save_checkpoint", action="store_true", help="save checkpoint during training")
-parser.add_argument("--max_epochs", default=5000, type=int, help="max number of training epochs")
-parser.add_argument("--batch_size", default=1, type=int, help="number of batch size")
+parser.add_argument("--save_checkpoint", action="store_false", help="save checkpoint during training")
+parser.add_argument("--max_epochs", default=1000, type=int, help="max number of training epochs")
+parser.add_argument("--batch_size", default=4, type=int, help="number of batch size")
 parser.add_argument("--sw_batch_size", default=4, type=int, help="number of sliding window batch size")
-parser.add_argument("--optim_lr", default=1e-4, type=float, help="optimization learning rate")
+parser.add_argument("--optim_lr", default=8e-4, type=float, help="optimization learning rate")
 parser.add_argument("--optim_name", default="adamw", type=str, help="optimization algorithm")
 parser.add_argument("--reg_weight", default=1e-5, type=float, help="regularization weight")
 parser.add_argument("--momentum", default=0.99, type=float, help="momentum")
@@ -77,7 +80,7 @@ parser.add_argument("--workers", default=8, type=int, help="number of workers")
 parser.add_argument("--feature_size", default=config.vit_embed_dim, type=int, help="feature size")
 parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
 parser.add_argument("--out_channels", default=config.num_classes, type=int, help="number of output channels")
-parser.add_argument("--use_normal_dataset", action="store_true", help="use monai Dataset class")
+parser.add_argument("--use_normal_dataset", action="store_false", help="use monai Dataset class")
 parser.add_argument("--a_min", default=-175.0, type=float, help="a_min in ScaleIntensityRanged")
 parser.add_argument("--a_max", default=250.0, type=float, help="a_max in ScaleIntensityRanged")
 parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
@@ -100,8 +103,8 @@ parser.add_argument("--warmup_epochs", default=50, type=int, help="number of war
 parser.add_argument("--resume_ckpt", action="store_true", help="resume training from pretrained checkpoint")
 parser.add_argument("--smooth_dr", default=1e-6, type=float, help="constant added to dice denominator to avoid nan")
 parser.add_argument("--smooth_nr", default=0.0, type=float, help="constant added to dice numerator to avoid zero")
-parser.add_argument("--use_checkpoint", action="store_true", help="use gradient checkpointing to save memory")
-parser.add_argument("--use_ssl_pretrained", action="store_true", help="use self-supervised pretrained weights")
+parser.add_argument("--use_checkpoint", action="store_false", help="use gradient checkpointing to save memory")
+parser.add_argument("--use_ssl_pretrained", action="store_false", help="use self-supervised pretrained weights")
 parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
 parser.add_argument("--model_name", default="swin", type=str, help="spatial dimension of input data")
 parser.add_argument("--norm_name", default="instance", type=str, help="normalization layer type in decoder")
@@ -113,7 +116,12 @@ parser.add_argument(
 parser.add_argument("--pos_embed", default="perceptron", type=str, help="type of position embedding")
 parser.add_argument("--patch_merge_layer_index", default=6, type=int, help="type of position embedding")
 parser.add_argument("--patch_merge_num_tokens", default=8, type=int, help="type of position embedding")
-parser.add_argument("--load_dir", default="./pretrained/", type=str, help="load directory")
+parser.add_argument(
+    "--load_dir",
+    default=Path(config.tensorboard_dir) / "pretrain" / "pretrain_dae",
+    type=str,
+    help="load directory",
+)
 parser.add_argument("--finetune_choice", default="both", type=str, help="Fine tune choice")
 parser.add_argument("--set_determ", default=True, type=bool, help="Set deterministic training")
 parser.add_argument("--seed", default=42, type=int, help="seed to change the deterministic randomness")
@@ -142,6 +150,7 @@ def main():
 
 
 def main_worker(gpu, args):
+    args.amp = not args.noamp
     if args.distributed:
         torch.multiprocessing.set_start_method("fork", force=True)
     np.set_printoptions(formatter={"float": "{: 0.3f}".format}, suppress=True)
@@ -154,7 +163,10 @@ def main_worker(gpu, args):
     torch.cuda.set_device(args.gpu)
     torch.backends.cudnn.benchmark = True
     args.test_mode = False
+
+    # 加载数据集
     # loader = get_loader(args)
+
     print(args.rank, " gpu", args.gpu)
     if args.rank == 0:
         print("Batch size is:", args.batch_size, "epochs", args.max_epochs)
@@ -186,30 +198,34 @@ def main_worker(gpu, args):
             use_checkpoint=args.use_checkpoint,
         )
 
-    if args.resume_ckpt:
-        model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
-        model.load_state_dict(model_dict)
-        print("Use pretrained weights")
+    # if args.resume_ckpt:
+    #     # 是否从 ckpt 继续训练
+    #     model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
+    #     model.load_state_dict(model_dict)
+    #     print("Use pretrained weights")
 
     # # print(model)
     # for n, m in model.swinViT.named_modules():
     #     print(n, sum(mm.numel() for mm in m.parameters()))
 
-    return model
+    # return model
 
     if args.use_ssl_pretrained:
+        # 是否加载预训练权重。
         # pdb.set_trace()
         try:
             weight = torch.load(os.path.join(args.load_dir, "ckpt_best.pth"))
-            # model.load_state_dict(weight["model"], strict=False)
-            model.load_from(weights=weight, finetune_choice=args.finetune_choice)
+            model.load_state_dict(weight["model"], strict=False)
+            # model.load_from(weights=weight, finetune_choice=args.finetune_choice)
             print("Using pretrained self-supervied Swin UNETR backbone weights !")
         except ValueError:
             raise ValueError("Self-supervised pre-trained weights not available for" + str(args.model_name))
 
+    return model
+
     dice_loss = DiceCELoss(to_onehot_y=True, softmax=True)
-    post_label = AsDiscrete(to_onehot=True, n_classes=args.out_channels)
-    post_pred = AsDiscrete(argmax=True, to_onehot=True, n_classes=args.out_channels)
+    post_label = AsDiscrete(to_onehot=config.num_classes, n_classes=args.out_channels)
+    post_pred = AsDiscrete(argmax=True, to_onehot=config.num_classes, n_classes=args.out_channels)
     dice_acc = DiceMetric(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
     model_inferer = partial(
         sliding_window_inference,
@@ -239,7 +255,7 @@ def main_worker(gpu, args):
             best_acc = checkpoint["best_acc"]
         print("=> loaded checkpoint '{}' (epoch {}) (bestacc {})".format(args.checkpoint, start_epoch, best_acc))
 
-    model = torch.nn.parallel.DataParallel(model, device_ids=[0, 1, 2, 3]).cuda()
+    model = torch.nn.parallel.DataParallel(model, device_ids=config.device_ids).cuda()
 
     if args.distributed:
         torch.cuda.set_device(args.gpu)
@@ -300,10 +316,12 @@ def get_dae_model():
 
 if __name__ == "__main__":
     args = parser.parse_args()
+    # model = main_worker(0, args)
+
+    dummy_x = torch.rand(size=(1, 1, 64, 64, 64))
+
     model = main_worker(0, args)
 
-    # model = get_model()
-    input = torch.randn(1, 1, 64, 64, 64)
-    output = model(input)
-    print(output.shape)
-    pass
+    y_hat = model(dummy_x)
+    print(model)
+    print(y_hat.shape)
