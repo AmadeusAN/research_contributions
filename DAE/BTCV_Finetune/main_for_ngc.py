@@ -118,7 +118,7 @@ parser.add_argument("--patch_merge_layer_index", default=6, type=int, help="type
 parser.add_argument("--patch_merge_num_tokens", default=8, type=int, help="type of position embedding")
 parser.add_argument(
     "--load_dir",
-    default=Path(config.tensorboard_dir) / "pretrain" / "pretrain_dae",
+    default=Path(config.tensorboard_dir) / "pretrain" / "pretrain_dae_RAOS",
     type=str,
     help="load directory",
 )
@@ -128,7 +128,7 @@ parser.add_argument("--seed", default=42, type=int, help="seed to change the det
 
 
 def main():
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
     args.amp = not args.noamp
     args.logdir = "./runs/" + str(args.logdir)
     determ = args.set_determ
@@ -309,13 +309,13 @@ def main_worker(gpu, args):
 
 
 def get_dae_model():
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args(args=[])
     model = main_worker(0, args)
     return model
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args(args=[])
     # model = main_worker(0, args)
 
     dummy_x = torch.rand(size=(1, 1, 64, 64, 64))
